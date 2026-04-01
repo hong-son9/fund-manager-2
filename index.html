@@ -32,10 +32,17 @@
             box-shadow: var(--shadow-lg);
             position: sticky; top: 0; z-index: 100;
         }
+        .bank-info {
+            font-size: 11px;
+            opacity: 0.75;
+            margin-top: 3px;
+            letter-spacing: 0.4px;
+        }
         .header-inner {
             max-width: 1400px; margin: 0 auto;
             display: flex; align-items: center; justify-content: space-between;
-            height: 70px;
+            height: 64px;
+            position: relative;
         }
         .brand { display: flex; align-items: center; gap: 14px; }
         .brand-logo {
@@ -48,6 +55,25 @@
         }
         .brand h1 { font-size: 20px; font-weight: 700; }
         .brand p  { font-size: 12px; opacity: .8; margin-top: 1px; }
+        .header-qr {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+        .header-qr img {
+            width: 54px;
+            height: 54px;
+            border-radius: 8px;
+            border: 2px solid rgba(255,255,255,0.5);
+            cursor: pointer;
+            transition: transform .2s;
+        }
+        .header-qr img:hover { transform: scale(1.08); }
+        .header-qr span { font-size: 10px; opacity: .75; font-weight: 600; letter-spacing: .4px; }
         .btn-add {
             background: rgba(255,255,255,0.15);
             border: 1.5px solid rgba(255,255,255,0.4);
@@ -212,7 +238,11 @@
             <div>
                 <h1>Quỹ 500 Anh Em</h1>
                 <p>Quản lý chi tiêu minh bạch · rõ ràng</p>
+                <p class="bank-info">🏦 BIDV · 48210000777811 · PHIHONGSON</p>
             </div>
+        </div>
+        <div class="header-qr">
+            <img src="qr.jpg" alt="QR BIDV" title="Quét để chuyển tiền">
         </div>
         <button class="btn-add" onclick="openAdd()">
             <span style="font-size:18px;line-height:1">+</span>
