@@ -526,6 +526,33 @@
     /* ===== OPEN QR ===== */
     function openQR() { document.getElementById('modalQR').classList.add('open'); }
 
+    /* ===== MUTUAL EXCLUSIVE: tiền vào / tiền ra ===== */
+    function initMoneyFields() {
+        var vao = document.getElementById('fVao');
+        var ra  = document.getElementById('fRa');
+        vao.addEventListener('input', function() {
+            var v = parseFloat(this.value) || 0;
+            ra.disabled      = v > 0;
+            ra.style.opacity = v > 0 ? '0.35' : '1';
+            ra.style.cursor  = v > 0 ? 'not-allowed' : '';
+            if (v > 0) ra.value = '';
+        });
+        ra.addEventListener('input', function() {
+            var v = parseFloat(this.value) || 0;
+            vao.disabled      = v > 0;
+            vao.style.opacity = v > 0 ? '0.35' : '1';
+            vao.style.cursor  = v > 0 ? 'not-allowed' : '';
+            if (v > 0) vao.value = '';
+        });
+    }
+    function resetMoneyFields() {
+        ['fVao','fRa'].forEach(function(id) {
+            var el = document.getElementById(id);
+            el.disabled = false; el.style.opacity = '1'; el.style.cursor = '';
+        });
+    }
+    initMoneyFields();
+
     /* ===== OPEN ADD ===== */
     function openAdd() {
         document.getElementById('modalTitle').textContent = '➕ Thêm giao dịch';
@@ -534,6 +561,7 @@
         document.getElementById('fVao').value     = '';
         document.getElementById('fRa').value      = '';
         document.getElementById('fNoidung').value = '';
+        resetMoneyFields();
         document.getElementById('modalForm').classList.add('open');
         setTimeout(function(){ document.getElementById('fNgay').focus(); }, 120);
     }
@@ -545,8 +573,12 @@
         document.getElementById('modalTitle').textContent = '✏️ Sửa giao dịch';
         document.getElementById('fId').value      = t.id;
         document.getElementById('fNgay').value    = t.ngay;
+        resetMoneyFields();
         document.getElementById('fVao').value     = t.tien_vao > 0 ? t.tien_vao : '';
         document.getElementById('fRa').value      = t.tien_ra  > 0 ? t.tien_ra  : '';
+        // Disable field còn lại nếu đã có giá trị
+        if (t.tien_vao > 0) { document.getElementById('fRa').disabled = true;  document.getElementById('fRa').style.opacity  = '0.35'; }
+        if (t.tien_ra  > 0) { document.getElementById('fVao').disabled = true; document.getElementById('fVao').style.opacity = '0.35'; }
         document.getElementById('fNoidung').value = t.noi_dung || '';
         document.getElementById('modalForm').classList.add('open');
     }
