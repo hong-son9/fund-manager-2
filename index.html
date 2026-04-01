@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quỹ 500 Anh Em</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
     <style>
         :root {
             --primary: #667eea;
@@ -93,7 +94,17 @@
             color: #2d3748;
             letter-spacing: 1px;
             margin-bottom: 6px;
+            display: flex; align-items: center; justify-content: center; gap: 10px;
         }
+        .btn-copy-stk {
+            background: #ede9fe; border: none; color: #5b21b6;
+            width: 32px; height: 32px; border-radius: 8px;
+            cursor: pointer; font-size: 15px;
+            display: flex; align-items: center; justify-content: center;
+            transition: all .18s; flex-shrink: 0;
+        }
+        .btn-copy-stk:hover { background: #667eea; color: white; transform: scale(1.1); }
+        /* Chart */
         .qr-name {
             font-size: 16px;
             font-weight: 700;
@@ -296,7 +307,10 @@
         <div class="qr-modal-body">
             <img src="qr.jpg" alt="QR BIDV">
             <div class="qr-bank-name">🏦 Ngân hàng BIDV</div>
-            <div class="qr-account">48210000777811</div>
+            <div class="qr-account">
+                48210000777811
+                <button class="btn-copy-stk" onclick="copySTK()" title="Copy STK">📋</button>
+            </div>
             <div class="qr-name">PHIHONGSON</div>
             <div class="qr-hint">📱 Mở app ngân hàng → Quét mã → Chuyển tiền</div>
         </div>
@@ -443,8 +457,44 @@
         document.getElementById('tbody').innerHTML = '<tr><td colspan="7"><div class="state-box"><div class="icon">⚙️</div><h3>Chưa cấu hình Supabase</h3><p>Xem hướng dẫn ở banner phía trên</p></div></td></tr>';
     }
 
-    var rows  = [];
-    var delId = null;
+    var rows    = [];
+    var delId   = null;
+    var isAdmin = false;
+
+    /* ===== AUTH STATE ===== */
+    function setAdminUI(loggedIn) {
+        isAdmin = loggedIn;
+        document.getElementById('adminControls').style.display = loggedIn ? 'flex' : 'none';
+        document.getElementById('btnLogin').style.display      = loggedIn ? 'none' : 'flex';
+        render(); // re-render để ẩn/hiện nút edit/delete
+    }
+
+    if (IS_CONFIGURED) {
+        db.auth.getSession().then(function(res) {
+            setAdminUI(!!(res.data && res.data.session));
+        });
+        db.auth.onAuthStateChange(function(event, session) {
+            setAdminUI(!!session);
+        });
+    }
+
+    /* ===== LOGIN / LOGOUT ===== */
+    function openLogin() { document.getElementById('modalLogin').classList.add('open'); }
+
+    async function doLogin() {
+        var email = document.getElementById('lEmail').value.trim();
+        var pass  = document.getElementById('lPass').value;
+        if (!email || !pass) { toast('Vui lòng nhập đủ thông tin!', 'error'); return; }
+        var { error } = await db.auth.signInWithPassword({ email: email, password: pass });
+        if (error) { toast('Sai email hoặc mật khẩu!', 'error'); return; }
+        closeModal('modalLogin');
+        toast('Đăng nhập thành công!', 'success');
+    }
+
+    async function doLogout() {
+        await db.auth.signOut();
+        toast('Đã đăng xuất!', 'success');
+    }
 
     /* ===== UTILS ===== */
     function money(n) {
@@ -473,11 +523,14 @@
 
         if (error) { toast('Lỗi tải dữ liệu!', 'error'); return; }
 
+        // Tính running balance theo thứ tự cũ → mới
         var bal = 0;
-        rows = (data || []).map(function(t) {
+        var withBal = (data || []).map(function(t) {
             bal += (t.tien_vao || 0) - (t.tien_ra || 0);
             return Object.assign({}, t, { tongConLai: bal });
         });
+        // Đảo ngược: mới nhất lên đầu
+        rows = withBal.slice().reverse();
         render();
         stats();
     }
@@ -646,6 +699,13 @@
         el.innerHTML = '<span class="t-icon">' + (type==='success'?'✅':'❌') + '</span><span class="t-msg">' + msg + '</span>';
         wrap.appendChild(el);
         setTimeout(function(){ el.classList.add('out'); setTimeout(function(){ el.remove(); }, 300); }, 3000);
+    }
+
+    /* ===== COPY STK ===== */
+    function copySTK() {
+        navigator.clipboard.writeText('48210000777811').then(function() {
+            toast('Đã copy số tài khoản!', 'success');
+        });
     }
 
     /* ===== INIT ===== */
