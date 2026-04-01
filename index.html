@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quỹ 500 Anh Em</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --success: #00c853;
+            --danger: #ff5252;
+            --info: #2196F3;
+            --bg: #f0f2f5;
+            --card: #ffffff;
+            --text: #2d3748;
+            --text-light: #718096;
+            --border: #e2e8f0;
+            --shadow: 0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -1px rgba(0,0,0,.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0,0,0,.1);
+            --shadow-xl: 0 20px 40px rgba(0,0,0,.15);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+        /* ===== HEADER ===== */
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 0 30px;
+            color: white;
+            box-shadow: var(--shadow-lg);
+            position: sticky; top: 0; z-index: 100;
+        }
+        .header-inner {
+            max-width: 1400px; margin: 0 auto;
+            display: flex; align-items: center; justify-content: space-between;
+            height: 70px;
+        }
+        .brand { display: flex; align-items: center; gap: 14px; }
+        .brand-logo {
+            width: 44px; height: 44px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+        .brand h1 { font-size: 20px; font-weight: 700; }
+        .brand p  { font-size: 12px; opacity: .8; margin-top: 1px; }
+        .btn-add {
+            background: rgba(255,255,255,0.15);
+            border: 1.5px solid rgba(255,255,255,0.4);
+            color: white; padding: 9px 20px;
+            border-radius: 50px; cursor: pointer;
+            font-size: 14px; font-weight: 600;
+            transition: all .2s; display: flex; align-items: center; gap: 7px;
+            font-family: inherit;
+        }
+        .btn-add:hover { background: rgba(255,255,255,0.28); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,0,0,.2); }
+
+        /* ===== MAIN ===== */
+        .main { max-width: 1400px; margin: 0 auto; padding: 28px 20px; }
+
+        /* ===== STATS ===== */
+        .stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 18px; margin-bottom: 24px; }
+        .stat-card {
+            background: var(--card); border-radius: 16px; padding: 20px 22px;
+            box-shadow: var(--shadow);
+            display: flex; align-items: center; gap: 16px;
+            transition: transform .2s, box-shadow .2s;
+            position: relative; overflow: hidden;
+        }
+        .stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+        .stat-card.green::before { background: linear-gradient(90deg,#00c853,#69f0ae); }
+        .stat-card.red::before   { background: linear-gradient(90deg,#ff5252,#ff8a80); }
+        .stat-card.blue::before  { background: linear-gradient(90deg,#2196F3,#64b5f6); }
+        .stat-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+        .stat-icon { width:52px; height:52px; border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:24px; flex-shrink:0; }
+        .stat-icon.green { background: linear-gradient(135deg,#e8f5e9,#c8e6c9); }
+        .stat-icon.red   { background: linear-gradient(135deg,#fce4ec,#f8bbd0); }
+        .stat-icon.blue  { background: linear-gradient(135deg,#e3f2fd,#bbdefb); }
+        .stat-label { font-size:11px; color:var(--text-light); font-weight:600; text-transform:uppercase; letter-spacing:.7px; }
+        .stat-value { font-size:20px; font-weight:700; margin-top:5px; letter-spacing:-.5px; }
+        .stat-value.green  { color:#00a040; }
+        .stat-value.red    { color:#e53935; }
+        .stat-value.blue   { color:#1565c0; }
+        .stat-value.danger { color:#e53935; }
+
+        /* ===== TABLE ===== */
+        .table-card { background: var(--card); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; }
+        .table-head { padding: 18px 24px; border-bottom: 1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+        .table-head h2 { font-size:16px; font-weight:700; }
+        .badge { background: linear-gradient(135deg,#667eea22,#764ba222); color:var(--primary); font-size:12px; font-weight:600; padding:4px 12px; border-radius:20px; border:1px solid #667eea33; }
+        .table-wrap { overflow-x: auto; }
+        table { width:100%; border-collapse:collapse; }
+        thead th {
+            background: linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+            color:white; padding:13px 16px;
+            text-align:left; font-size:12px; font-weight:600;
+            text-transform:uppercase; letter-spacing:.6px; white-space:nowrap;
+        }
+        thead th:last-child { text-align:center; }
+        tbody tr { border-bottom:1px solid #f0f2f8; transition:background .12s; }
+        tbody tr:last-child { border-bottom:none; }
+        tbody tr:hover { background:#f5f7ff; }
+        tbody tr:nth-child(even) { background:#fafbff; }
+        tbody tr:nth-child(even):hover { background:#eff1ff; }
+        td { padding:13px 16px; font-size:14px; vertical-align:middle; }
+        td.stt { color:var(--text-light); font-size:13px; width:50px; }
+        .date-badge { background:#ede9fe; color:#5b21b6; padding:4px 11px; border-radius:20px; font-size:13px; font-weight:600; white-space:nowrap; display:inline-block; }
+        td.money-in  { font-weight:700; color:#00a040; }
+        td.money-out { font-weight:700; color:#e53935; }
+        td.money-dash { color:#cbd5e0; font-size:18px; }
+        .bal { font-weight:700; font-size:14px; }
+        .bal.pos { color:#1565c0; }
+        .bal.neg { color:#e53935; }
+        .noidung { max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#4a5568; }
+        .action-btns { display:flex; gap:7px; justify-content:center; }
+        .btn-icon { width:32px; height:32px; border:none; border-radius:8px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:15px; transition:all .18s; }
+        .btn-icon.edit { background:#dbeafe; color:#1d4ed8; }
+        .btn-icon.edit:hover { background:#2196F3; color:white; transform:scale(1.12); }
+        .btn-icon.del  { background:#fee2e2; color:#b91c1c; }
+        .btn-icon.del:hover  { background:#ef4444; color:white; transform:scale(1.12); }
+
+        /* ===== STATE ===== */
+        .state-box { text-align:center; padding:64px 20px; color:var(--text-light); }
+        .state-box .icon { font-size:60px; margin-bottom:14px; }
+        .state-box h3 { font-size:17px; color:var(--text); margin-bottom:6px; }
+        .state-box p { font-size:13px; }
+        .spinner { width:38px; height:38px; border:4px solid #e9ecef; border-top-color:var(--primary); border-radius:50%; animation:spin .75s linear infinite; margin:0 auto 16px; }
+        @keyframes spin { to { transform:rotate(360deg); } }
+
+        /* ===== MODAL ===== */
+        .overlay { display:none; position:fixed; inset:0; background:rgba(15,10,40,.55); z-index:500; align-items:center; justify-content:center; backdrop-filter:blur(5px); }
+        .overlay.open { display:flex; animation:fadeOv .2s ease; }
+        @keyframes fadeOv { from{opacity:0} to{opacity:1} }
+        .modal { background:white; border-radius:20px; width:100%; margin:16px; box-shadow:var(--shadow-xl); overflow:hidden; animation:slideUp .28s cubic-bezier(.34,1.56,.64,1); }
+        @keyframes slideUp { from{transform:translateY(40px) scale(.97);opacity:0} to{transform:translateY(0) scale(1);opacity:1} }
+        .modal-head { background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); padding:18px 22px; color:white; display:flex; align-items:center; justify-content:space-between; }
+        .modal-head h3 { font-size:17px; font-weight:700; display:flex; align-items:center; gap:9px; }
+        .modal-x { width:30px; height:30px; background:rgba(255,255,255,.2); border:none; color:white; border-radius:50%; cursor:pointer; font-size:17px; display:flex; align-items:center; justify-content:center; transition:background .15s; font-family:inherit; }
+        .modal-x:hover { background:rgba(255,255,255,.35); }
+        .modal-body { padding:22px 24px; }
+        .form-group { margin-bottom:18px; }
+        .form-group label { display:block; font-size:12px; font-weight:700; color:#4a5568; margin-bottom:7px; text-transform:uppercase; letter-spacing:.5px; }
+        .form-group label .req { color:var(--danger); margin-left:2px; }
+        .form-control { width:100%; padding:10px 13px; border:2px solid var(--border); border-radius:10px; font-size:14px; color:var(--text); transition:border-color .18s,box-shadow .18s; background:#fafbff; font-family:inherit; }
+        .form-control:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px rgba(102,126,234,.18); background:white; }
+        textarea.form-control { resize:vertical; min-height:80px; }
+        .form-row { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+        .modal-foot { padding:14px 24px; border-top:1px solid var(--border); display:flex; gap:10px; justify-content:flex-end; background:#fafbff; }
+        .btn { padding:10px 22px; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer; border:none; transition:all .18s; font-family:inherit; display:inline-flex; align-items:center; gap:6px; }
+        .btn-primary { background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); color:white; }
+        .btn-primary:hover { opacity:.9; transform:translateY(-1px); box-shadow:0 5px 15px rgba(102,126,234,.4); }
+        .btn-ghost { background:#f0f2f5; color:var(--text-light); }
+        .btn-ghost:hover { background:var(--border); color:var(--text); }
+        .btn-red { background:linear-gradient(135deg,#ff5252,#ff1744); color:white; }
+        .btn-red:hover { opacity:.9; transform:translateY(-1px); box-shadow:0 5px 15px rgba(255,82,82,.4); }
+        .confirm-body { padding:30px 24px; text-align:center; }
+        .confirm-body .icon { font-size:56px; margin-bottom:14px; }
+        .confirm-body h3 { font-size:18px; color:var(--text); margin-bottom:8px; }
+        .confirm-body p  { font-size:14px; color:var(--text-light); line-height:1.6; }
+
+        /* ===== TOAST ===== */
+        .toast-wrap { position:fixed; bottom:24px; right:24px; z-index:9999; display:flex; flex-direction:column; gap:10px; pointer-events:none; }
+        .toast { background:white; border-radius:12px; padding:13px 16px; box-shadow:0 8px 30px rgba(0,0,0,.18); display:flex; align-items:center; gap:11px; min-width:270px; border-left:4px solid; animation:toastIn .3s cubic-bezier(.34,1.56,.64,1); }
+        .toast.success { border-color:#00c853; }
+        .toast.error   { border-color:#ff5252; }
+        .toast .t-icon { font-size:19px; }
+        .toast .t-msg  { font-size:13px; font-weight:600; color:var(--text); }
+        @keyframes toastIn  { from{transform:translateX(110%);opacity:0} to{transform:translateX(0);opacity:1} }
+        @keyframes toastOut { from{transform:translateX(0);opacity:1} to{transform:translateX(110%);opacity:0} }
+        .toast.out { animation:toastOut .28s ease forwards; }
+
+        /* ===== CONFIG BANNER ===== */
+        .config-banner {
+            background: linear-gradient(135deg, #fff3cd, #ffeaa7);
+            border: 1.5px solid #ffc107;
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin-bottom: 24px;
+            display: flex; align-items: flex-start; gap: 12px;
+        }
+        .config-banner .cb-icon { font-size: 22px; flex-shrink: 0; margin-top: 1px; }
+        .config-banner h4 { font-size: 14px; font-weight: 700; color: #856404; margin-bottom: 4px; }
+        .config-banner p  { font-size: 13px; color: #856404; line-height: 1.6; }
+        .config-banner code { background: rgba(0,0,0,.08); padding: 1px 6px; border-radius: 4px; font-family: monospace; font-size: 12px; }
+
+        @media(max-width:768px) {
+            .header { padding: 0 16px; }
+            .brand p { display:none; }
+            .stats { grid-template-columns:1fr 1fr; }
+            .stats .stat-card:last-child { grid-column:span 2; }
+            .main { padding:16px 12px; }
+            .form-row { grid-template-columns:1fr; }
+            .btn-add .lbl { display:none; }
+        }
+        @media(max-width:480px) {
+            .stats { grid-template-columns:1fr; }
+            .stats .stat-card:last-child { grid-column:span 1; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+    <div class="header-inner">
+        <div class="brand">
+            <div class="brand-logo">💰</div>
+            <div>
+                <h1>Quỹ 500 Anh Em</h1>
+                <p>Quản lý chi tiêu minh bạch · rõ ràng</p>
+            </div>
+        </div>
+        <button class="btn-add" onclick="openAdd()">
+            <span style="font-size:18px;line-height:1">+</span>
+            <span class="lbl">Thêm giao dịch</span>
+        </button>
+    </div>
+</header>
+
+<main class="main">
+
+    <!-- Config warning nếu chưa cài key -->
+    <div class="config-banner" id="configBanner" style="display:none">
+        <span class="cb-icon">⚠️</span>
+        <div>
+            <h4>Chưa cấu hình Supabase!</h4>
+            <p>Mở file <code>index.html</code>, tìm dòng <code>SUPABASE_URL</code> và <code>SUPABASE_ANON_KEY</code> rồi điền thông tin từ project Supabase của bạn vào.</p>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats">
+        <div class="stat-card green">
+            <div class="stat-icon green">📈</div>
+            <div>
+                <div class="stat-label">Tổng tiền vào</div>
+                <div class="stat-value green" id="statIn">—</div>
+            </div>
+        </div>
+        <div class="stat-card red">
+            <div class="stat-icon red">📉</div>
+            <div>
+                <div class="stat-label">Tổng tiền ra</div>
+                <div class="stat-value red" id="statOut">—</div>
+            </div>
+        </div>
+        <div class="stat-card blue">
+            <div class="stat-icon blue">💵</div>
+            <div>
+                <div class="stat-label">Số dư hiện tại</div>
+                <div class="stat-value blue" id="statBal">—</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="table-card">
+        <div class="table-head">
+            <h2>📋 Lịch sử giao dịch</h2>
+            <span class="badge" id="recCount">0 giao dịch</span>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:48px">#</th>
+                        <th style="width:130px">Ngày</th>
+                        <th style="width:160px">Tiền Vào</th>
+                        <th style="width:160px">Tiền Ra</th>
+                        <th>Nội Dung</th>
+                        <th style="width:170px">Tổng Còn Lại</th>
+                        <th style="width:100px">Thao Tác</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody">
+                    <tr><td colspan="7">
+                        <div class="state-box">
+                            <div class="spinner"></div>
+                            Đang tải dữ liệu...
+                        </div>
+                    </td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</main>
+
+<!-- FORM MODAL -->
+<div class="overlay" id="modalForm">
+    <div class="modal" style="max-width:490px">
+        <div class="modal-head">
+            <h3 id="modalTitle">➕ Thêm giao dịch</h3>
+            <button class="modal-x" onclick="closeModal('modalForm')">✕</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="fId">
+            <div class="form-group">
+                <label>Ngày <span class="req">*</span></label>
+                <input type="date" class="form-control" id="fNgay">
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Tiền vào (đ)</label>
+                    <input type="number" class="form-control" id="fVao" placeholder="0" min="0" step="1000">
+                </div>
+                <div class="form-group">
+                    <label>Tiền ra (đ)</label>
+                    <input type="number" class="form-control" id="fRa" placeholder="0" min="0" step="1000">
+                </div>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+                <label>Nội dung</label>
+                <textarea class="form-control" id="fNoidung" placeholder="Mô tả giao dịch..."></textarea>
+            </div>
+        </div>
+        <div class="modal-foot">
+            <button class="btn btn-ghost" onclick="closeModal('modalForm')">Hủy</button>
+            <button class="btn btn-primary" onclick="save()">💾 Lưu</button>
+        </div>
+    </div>
+</div>
+
+<!-- DELETE MODAL -->
+<div class="overlay" id="modalDel">
+    <div class="modal" style="max-width:380px">
+        <div class="confirm-body">
+            <div class="icon">🗑️</div>
+            <h3>Xóa giao dịch?</h3>
+            <p>Hành động này không thể hoàn tác.<br>Bạn có chắc chắn muốn xóa?</p>
+        </div>
+        <div class="modal-foot">
+            <button class="btn btn-ghost" onclick="closeModal('modalDel')">Hủy</button>
+            <button class="btn btn-red" onclick="doDelete()">🗑️ Xóa</button>
+        </div>
+    </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+    // =====================================================
+    //  ⚙️  CẤU HÌNH SUPABASE — điền thông tin vào đây
+    // =====================================================
+    const SUPABASE_URL      = 'https://ktpvsngrgnqatqltrzxa.supabase.co';  // thay bằng Project URL của bạn
+    const SUPABASE_ANON_KEY = 'sb_publishable_gBn-rn90ziYl2azF9xvCnw_T8mG2XLS';  // thay bằng anon key của bạn
+    // =====================================================
+
+    const IS_CONFIGURED = !SUPABASE_URL.includes('xxxxxxxx') && !SUPABASE_ANON_KEY.includes('XXXX');
+
+    const db = IS_CONFIGURED
+        ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+        : null;
+
+    if (!IS_CONFIGURED) {
+        document.getElementById('configBanner').style.display = 'flex';
+        document.getElementById('tbody').innerHTML = '<tr><td colspan="7"><div class="state-box"><div class="icon">⚙️</div><h3>Chưa cấu hình Supabase</h3><p>Xem hướng dẫn ở banner phía trên</p></div></td></tr>';
+    }
+
+    var rows  = [];
+    var delId = null;
+
+    /* ===== UTILS ===== */
+    function money(n) {
+        if (!n || n === 0) return null;
+        return new Intl.NumberFormat('vi-VN').format(n) + '\u00a0đ';
+    }
+    function moneyFull(n) {
+        return new Intl.NumberFormat('vi-VN').format(n || 0) + '\u00a0đ';
+    }
+    function fmtDate(s) {
+        if (!s) return '';
+        var p = s.split('-');
+        return p[2] + '/' + p[1] + '/' + p[0];
+    }
+    function today() { return new Date().toISOString().split('T')[0]; }
+    function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    /* ===== LOAD ===== */
+    async function load() {
+        if (!IS_CONFIGURED) return;
+        var { data, error } = await db
+            .from('transactions')
+            .select('*')
+            .order('ngay', { ascending: true })
+            .order('id',   { ascending: true });
+
+        if (error) { toast('Lỗi tải dữ liệu!', 'error'); return; }
+
+        var bal = 0;
+        rows = (data || []).map(function(t) {
+            bal += (t.tien_vao || 0) - (t.tien_ra || 0);
+            return Object.assign({}, t, { tongConLai: bal });
+        });
+        render();
+        stats();
+    }
+
+    /* ===== RENDER ===== */
+    function render() {
+        var tbody = document.getElementById('tbody');
+        document.getElementById('recCount').textContent = rows.length + ' giao dịch';
+
+        if (rows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7"><div class="state-box"><div class="icon">📭</div><h3>Chưa có giao dịch nào</h3><p>Nhấn "Thêm giao dịch" để bắt đầu</p></div></td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = rows.map(function(t, i) {
+            var vao = t.tien_vao || 0;
+            var ra  = t.tien_ra  || 0;
+            var bal = t.tongConLai || 0;
+            var vaoCell = vao > 0 ? '<td class="money-in">+' + money(vao) + '</td>' : '<td class="money-dash">—</td>';
+            var raCell  = ra  > 0 ? '<td class="money-out">−' + money(ra)  + '</td>' : '<td class="money-dash">—</td>';
+            return '<tr>'
+                + '<td class="stt">' + (i+1) + '</td>'
+                + '<td><span class="date-badge">' + fmtDate(t.ngay) + '</span></td>'
+                + vaoCell + raCell
+                + '<td class="noidung">' + (t.noi_dung ? escHtml(t.noi_dung) : '<span style="color:#cbd5e0">—</span>') + '</td>'
+                + '<td><span class="bal ' + (bal >= 0 ? 'pos' : 'neg') + '">' + moneyFull(bal) + '</span></td>'
+                + '<td><div class="action-btns">'
+                + '<button class="btn-icon edit" onclick="openEdit(' + t.id + ')" title="Sửa">✏️</button>'
+                + '<button class="btn-icon del"  onclick="openDel('  + t.id + ')" title="Xóa">🗑️</button>'
+                + '</div></td></tr>';
+        }).join('');
+    }
+
+    /* ===== STATS ===== */
+    function stats() {
+        var totalIn = 0, totalOut = 0;
+        rows.forEach(function(t) { totalIn += t.tien_vao||0; totalOut += t.tien_ra||0; });
+        var bal = totalIn - totalOut;
+        document.getElementById('statIn').textContent  = moneyFull(totalIn);
+        document.getElementById('statOut').textContent = moneyFull(totalOut);
+        var el = document.getElementById('statBal');
+        el.textContent = moneyFull(bal);
+        el.className   = 'stat-value ' + (bal >= 0 ? 'blue' : 'danger');
+    }
+
+    /* ===== OPEN ADD ===== */
+    function openAdd() {
+        document.getElementById('modalTitle').textContent = '➕ Thêm giao dịch';
+        document.getElementById('fId').value      = '';
+        document.getElementById('fNgay').value    = today();
+        document.getElementById('fVao').value     = '';
+        document.getElementById('fRa').value      = '';
+        document.getElementById('fNoidung').value = '';
+        document.getElementById('modalForm').classList.add('open');
+        setTimeout(function(){ document.getElementById('fNgay').focus(); }, 120);
+    }
+
+    /* ===== OPEN EDIT ===== */
+    function openEdit(id) {
+        var t = rows.find(function(x){ return x.id === id; });
+        if (!t) return;
+        document.getElementById('modalTitle').textContent = '✏️ Sửa giao dịch';
+        document.getElementById('fId').value      = t.id;
+        document.getElementById('fNgay').value    = t.ngay;
+        document.getElementById('fVao').value     = t.tien_vao > 0 ? t.tien_vao : '';
+        document.getElementById('fRa').value      = t.tien_ra  > 0 ? t.tien_ra  : '';
+        document.getElementById('fNoidung').value = t.noi_dung || '';
+        document.getElementById('modalForm').classList.add('open');
+    }
+
+    /* ===== SAVE ===== */
+    async function save() {
+        var id      = document.getElementById('fId').value;
+        var ngay    = document.getElementById('fNgay').value;
+        var vao     = document.getElementById('fVao').value;
+        var ra      = document.getElementById('fRa').value;
+        var noidung = document.getElementById('fNoidung').value.trim();
+
+        if (!ngay)      { toast('Vui lòng chọn ngày!', 'error'); return; }
+        if (!vao && !ra){ toast('Vui lòng nhập tiền vào hoặc tiền ra!', 'error'); return; }
+
+        var payload = {
+            ngay:     ngay,
+            tien_vao: vao ? parseFloat(vao) : 0,
+            tien_ra:  ra  ? parseFloat(ra)  : 0,
+            noi_dung: noidung || null
+        };
+
+        var error;
+        if (id) {
+            var res = await db.from('transactions').update(payload).eq('id', id);
+            error = res.error;
+        } else {
+            var res = await db.from('transactions').insert(payload);
+            error = res.error;
+        }
+
+        if (error) { toast('Có lỗi xảy ra: ' + error.message, 'error'); return; }
+        closeModal('modalForm');
+        toast(id ? 'Cập nhật thành công!' : 'Thêm giao dịch thành công!', 'success');
+        load();
+    }
+
+    /* ===== DELETE ===== */
+    function openDel(id) { delId = id; document.getElementById('modalDel').classList.add('open'); }
+    async function doDelete() {
+        if (!delId) return;
+        var { error } = await db.from('transactions').delete().eq('id', delId);
+        if (error) { toast('Có lỗi xảy ra!', 'error'); return; }
+        closeModal('modalDel');
+        toast('Đã xóa giao dịch!', 'success');
+        delId = null;
+        load();
+    }
+
+    /* ===== MODAL HELPERS ===== */
+    function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+    document.querySelectorAll('.overlay').forEach(function(el) {
+        el.addEventListener('click', function(e) { if (e.target === el) el.classList.remove('open'); });
+    });
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') document.querySelectorAll('.overlay.open').forEach(function(m){ m.classList.remove('open'); });
+    });
+
+    /* ===== TOAST ===== */
+    function toast(msg, type) {
+        type = type || 'success';
+        var wrap = document.getElementById('toastWrap');
+        var el   = document.createElement('div');
+        el.className = 'toast ' + type;
+        el.innerHTML = '<span class="t-icon">' + (type==='success'?'✅':'❌') + '</span><span class="t-msg">' + msg + '</span>';
+        wrap.appendChild(el);
+        setTimeout(function(){ el.classList.add('out'); setTimeout(function(){ el.remove(); }, 300); }, 3000);
+    }
+
+    /* ===== INIT ===== */
+    load();
+</script>
+</body>
+</html>
