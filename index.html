@@ -45,7 +45,8 @@
             height: 64px;
             position: relative;
         }
-        .brand { display: flex; align-items: center; gap: 14px; }
+        .brand { display: flex; align-items: center; gap: 14px; min-width: 0; flex-shrink: 1; overflow: hidden; }
+        .brand > div { min-width: 0; overflow: hidden; }
         .brand-logo {
             width: 44px; height: 44px;
             background: rgba(255,255,255,0.2);
@@ -53,9 +54,10 @@
             display: flex; align-items: center; justify-content: center;
             font-size: 22px;
             border: 1px solid rgba(255,255,255,0.3);
+            flex-shrink: 0;
         }
-        .brand h1 { font-size: 20px; font-weight: 700; }
-        .brand p  { font-size: 12px; opacity: .8; margin-top: 1px; }
+        .brand h1 { font-size: 20px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .brand p  { font-size: 12px; opacity: .8; margin-top: 1px; white-space: nowrap; }
         .btn-qr {
             background: rgba(255,255,255,0.15);
             border: 1.5px solid rgba(255,255,255,0.4);
@@ -280,11 +282,13 @@
         @media(max-width:768px) {
             .header { padding: 0 16px; }
             .brand p { display:none; }
+            .brand h1 { font-size: 16px; }
             .stats { grid-template-columns:1fr 1fr; }
             .stats .stat-card:last-child { grid-column:span 2; }
             .main { padding:16px 12px; }
             .form-row { grid-template-columns:1fr; }
             .btn-add .lbl { display:none; }
+            .btn-qr .lbl { display:none; }
         }
         @media(max-width:480px) {
             .stats { grid-template-columns:1fr; }
@@ -303,7 +307,7 @@
                 <h1>Quỹ 500 Anh Em</h1>
             </div>
         </div>
-        <div style="display:flex;gap:10px;align-items:center">
+        <div style="display:flex;gap:10px;align-items:center;flex-shrink:0">
             <button class="btn-qr" onclick="openQR()">
                 <span>📲</span>
                 <span class="lbl">Chuyển tiền</span>
