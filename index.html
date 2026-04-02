@@ -68,6 +68,7 @@
             font-family: inherit;
         }
         .btn-qr:hover { background: rgba(255,255,255,0.28); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,0,0,.2); }
+        .btn-qr.icon-only { width: 38px; height: 38px; padding: 0; border-radius: 50%; justify-content: center; font-size: 18px; }
 
         /* QR Modal */
         .qr-modal-body {
@@ -481,11 +482,11 @@
         <div class="modal-body">
             <div class="form-group">
                 <label>Email <span class="req">*</span></label>
-                <input type="email" class="form-control" id="lEmail" placeholder="email@example.com">
+                <input type="email" class="form-control" id="lEmail" placeholder="email@gmail.com">
             </div>
             <div class="form-group" style="margin-bottom:0">
                 <label>Mật khẩu <span class="req">*</span></label>
-                <input type="password" class="form-control" id="lPass" placeholder="••••••••"
+                <input type="password" class="form-control" id="lPass" placeholder=""
                     onkeydown="if(event.key==='Enter') doLogin()">
             </div>
         </div>
