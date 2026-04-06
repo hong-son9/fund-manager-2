@@ -257,7 +257,12 @@
         .confirm-body h3 { font-size:18px; color:var(--text); margin-bottom:8px; }
         .confirm-body p  { font-size:14px; color:var(--text-light); line-height:1.6; }
 
-        /* ===== TOAST ===== */
+        /* ===== IMAGE VIEWER ===== */
+        .image-viewer { display:none; position:fixed; inset:0; background:rgba(0,0,0,.95); z-index:9000; align-items:center; justify-content:center; }
+        .image-viewer.open { display:flex; animation:fadeOv .2s ease; }
+        .image-viewer img { max-width:95vw; max-height:95vh; object-fit:contain; border-radius:8px; }
+        .image-viewer-close { position:absolute; top:20px; right:20px; width:44px; height:44px; background:rgba(255,255,255,.2); border:1.5px solid rgba(255,255,255,.4); color:white; border-radius:50%; cursor:pointer; font-size:24px; display:flex; align-items:center; justify-content:center; transition:all .2s; font-family:inherit; }
+        .image-viewer-close:hover { background:rgba(255,255,255,.35); transform:scale(1.1); }
         .toast-wrap { position:fixed; bottom:24px; right:24px; z-index:9999; display:flex; flex-direction:column; gap:10px; pointer-events:none; }
         .toast { background:white; border-radius:12px; padding:13px 16px; box-shadow:0 8px 30px rgba(0,0,0,.18); display:flex; align-items:center; gap:11px; min-width:270px; border-left:4px solid; animation:toastIn .3s cubic-bezier(.34,1.56,.64,1); }
         .toast.success { border-color:#00c853; }
@@ -559,6 +564,12 @@
             <button class="btn btn-primary" onclick="doLogin()">🔓 Đăng nhập</button>
         </div>
     </div>
+</div>
+
+<!-- IMAGE VIEWER MODAL -->
+<div class="image-viewer" id="imageViewer">
+    <button class="image-viewer-close" onclick="closeImageViewer()">✕</button>
+    <img id="imageViewerImg" alt="Chi tiết ảnh" onclick="event.stopPropagation()">
 </div>
 
 <!-- TOAST -->
@@ -922,7 +933,10 @@
         
         // Show/hide image
         if (t.anh_url) {
-            document.getElementById('detailImage').src = t.anh_url;
+            var detailImg = document.getElementById('detailImage');
+            detailImg.src = t.anh_url;
+            detailImg.style.cursor = 'pointer';
+            detailImg.onclick = function() { openImageViewer(t.anh_url); };
             document.getElementById('detailImageBox').style.display = 'block';
         } else {
             document.getElementById('detailImageBox').style.display = 'none';
@@ -943,6 +957,26 @@
         closeModal('modalDetail');
         setTimeout(function(){ openDel(currentDetailId); }, 200);
     }
+
+    /* ===== IMAGE VIEWER ===== */
+    function openImageViewer(src) {
+        document.getElementById('imageViewerImg').src = src;
+        document.getElementById('imageViewer').classList.add('open');
+    }
+
+    function closeImageViewer() {
+        document.getElementById('imageViewer').classList.remove('open');
+    }
+
+    document.getElementById('imageViewer').addEventListener('click', function(e) {
+        if (e.target === this) closeImageViewer();
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && document.getElementById('imageViewer').classList.contains('open')) {
+            closeImageViewer();
+        }
+    });
 
     /* ===== MODAL HELPERS ===== */
     function closeModal(id) { document.getElementById(id).classList.remove('open'); }
