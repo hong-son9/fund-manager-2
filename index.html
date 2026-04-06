@@ -462,6 +462,7 @@
                 <input type="file" class="form-control" id="fAnh" accept="image/*" style="padding: 8px 13px; cursor: pointer;">
                 <div id="previewAnh" style="margin-top: 10px; display: none;">
                     <img id="previewImg" style="max-width: 100%; max-height: 200px; border-radius: 10px; border: 2px solid var(--border);">
+                    <button type="button" class="btn btn-ghost" id="removeImageBtn" style="margin-top: 10px; display: none;">🗑️ Xóa ảnh</button>
                 </div>
             </div>
         </div>
@@ -599,6 +600,7 @@
     var isAdmin = false;
     var currentDetailId = null;
     var selectedImageFile = null;
+    var removeImageFlag = false;
 
     /* ===== AUTH STATE ===== */
     function setAdminUI(loggedIn) {
@@ -770,10 +772,13 @@
     /* ===== IMAGE PREVIEW ===== */
     function initImagePreview() {
         var fileInput = document.getElementById('fAnh');
+        var removeButton = document.getElementById('removeImageBtn');
         fileInput.addEventListener('change', function(e) {
             var file = e.target.files[0];
             if (file) {
+                removeImageFlag = false;
                 selectedImageFile = file;
+                removeButton.style.display = 'inline-flex';
                 var reader = new FileReader();
                 reader.onload = function(event) {
                     document.getElementById('previewImg').src = event.target.result;
@@ -783,8 +788,17 @@
             } else {
                 selectedImageFile = null;
                 document.getElementById('previewAnh').style.display = 'none';
+                removeButton.style.display = 'none';
             }
         });
+        removeButton.addEventListener('click', removeImageFromForm);
+    }
+    function removeImageFromForm() {
+        selectedImageFile = null;
+        removeImageFlag = true;
+        document.getElementById('fAnh').value = '';
+        document.getElementById('previewAnh').style.display = 'none';
+        document.getElementById('removeImageBtn').style.display = 'none';
     }
     initImagePreview();
 
@@ -798,7 +812,9 @@
         document.getElementById('fNoidung').value = '';
         document.getElementById('fAnh').value     = '';
         selectedImageFile = null;
+        removeImageFlag = false;
         document.getElementById('previewAnh').style.display = 'none';
+        document.getElementById('removeImageBtn').style.display = 'none';
         resetMoneyFields();
         document.getElementById('modalForm').classList.add('open');
         setTimeout(function(){ document.getElementById('fNgay').focus(); }, 120);
@@ -820,11 +836,14 @@
         document.getElementById('fNoidung').value = t.noi_dung || '';
         document.getElementById('fAnh').value     = '';
         selectedImageFile = null;
+        removeImageFlag = false;
         if (t.anh_url) {
             document.getElementById('previewImg').src = t.anh_url;
             document.getElementById('previewAnh').style.display = 'block';
+            document.getElementById('removeImageBtn').style.display = 'inline-flex';
         } else {
             document.getElementById('previewAnh').style.display = 'none';
+            document.getElementById('removeImageBtn').style.display = 'none';
         }
         document.getElementById('modalForm').classList.add('open');
     }
@@ -878,6 +897,8 @@
                 toast('Lỗi: ' + err.message, 'error');
                 return;
             }
+        } else if (removeImageFlag) {
+            payload.anh_url = null;
         }
 
         var error;
