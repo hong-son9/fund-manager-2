@@ -196,7 +196,7 @@
         thead th:last-child { text-align:center; }
         table:not(.admin-mode) thead th:last-child,
         table:not(.admin-mode) tbody td:last-child { display:none; }
-        tbody tr { border-bottom:1px solid #f0f2f8; transition:background .12s; }
+        tbody tr { border-bottom:1px solid #f0f2f8; transition:background .12s; cursor: pointer; }
         tbody tr:last-child { border-bottom:none; }
         tbody tr:hover { background:#f5f7ff; }
         tbody tr:nth-child(even) { background:#fafbff; }
@@ -452,6 +452,13 @@
                 <label>Nội dung</label>
                 <textarea class="form-control" id="fNoidung" placeholder="Mô tả giao dịch..."></textarea>
             </div>
+            <div class="form-group" style="margin-bottom:0">
+                <label>Ảnh (tùy chọn)</label>
+                <input type="file" class="form-control" id="fAnh" accept="image/*" style="padding: 8px 13px; cursor: pointer;">
+                <div id="previewAnh" style="margin-top: 10px; display: none;">
+                    <img id="previewImg" style="max-width: 100%; max-height: 200px; border-radius: 10px; border: 2px solid var(--border);">
+                </div>
+            </div>
         </div>
         <div class="modal-foot">
             <button class="btn btn-ghost" onclick="closeModal('modalForm')">Hủy</button>
@@ -471,6 +478,60 @@
         <div class="modal-foot">
             <button class="btn btn-ghost" onclick="closeModal('modalDel')">Hủy</button>
             <button class="btn btn-red" onclick="doDelete()">🗑️ Xóa</button>
+        </div>
+    </div>
+</div>
+
+<!-- DETAIL MODAL -->
+<div class="overlay" id="modalDetail">
+    <div class="modal" style="max-width:520px">
+        <div class="modal-head">
+            <h3>📋 Chi tiết giao dịch</h3>
+            <button class="modal-x" onclick="closeModal('modalDetail')">✕</button>
+        </div>
+        <div class="modal-body" style="padding: 24px;">
+            <div style="display: grid; gap: 20px;">
+                <!-- Ảnh -->
+                <div id="detailImageBox" style="display: none;">
+                    <div style="font-size: 12px; font-weight: 700; color: #4a5568; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px;">📷 Ảnh</div>
+                    <img id="detailImage" style="width: 100%; border-radius: 12px; border: 2px solid var(--border); max-height: 300px; object-fit: cover;">
+                </div>
+                
+                <!-- Ngày -->
+                <div>
+                    <div style="font-size: 12px; font-weight: 700; color: #4a5568; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px;">📅 Ngày</div>
+                    <div style="font-size: 15px; color: #2d3748;" id="detailNgay">—</div>
+                </div>
+                
+                <!-- Tiền vào -->
+                <div>
+                    <div style="font-size: 12px; font-weight: 700; color: #4a5568; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px;">💰 Tiền Vào</div>
+                    <div style="font-size: 15px; font-weight: 700; color: #00a040;" id="detailVao">—</div>
+                </div>
+                
+                <!-- Tiền ra -->
+                <div>
+                    <div style="font-size: 12px; font-weight: 700; color: #4a5568; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px;">💸 Tiền Ra</div>
+                    <div style="font-size: 15px; font-weight: 700; color: #e53935;" id="detailRa">—</div>
+                </div>
+                
+                <!-- Nội dung -->
+                <div>
+                    <div style="font-size: 12px; font-weight: 700; color: #4a5568; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px;">📝 Nội Dung</div>
+                    <div style="font-size: 14px; color: #4a5568; line-height: 1.6; word-wrap: break-word;" id="detailNoidung">—</div>
+                </div>
+                
+                <!-- Số dư -->
+                <div>
+                    <div style="font-size: 12px; font-weight: 700; color: #4a5568; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px;">💵 Số Dư Còn Lại</div>
+                    <div style="font-size: 15px; font-weight: 700;" id="detailBal">—</div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-foot" id="detailFooter" style="display: none;">
+            <button class="btn btn-ghost" onclick="closeModal('modalDetail')">Đóng</button>
+            <button class="btn btn-primary" onclick="editFromDetail()" title="Sửa">✏️ Sửa</button>
+            <button class="btn btn-red" onclick="deleteFromDetail()" title="Xóa">🗑️ Xóa</button>
         </div>
     </div>
 </div>
@@ -525,6 +586,8 @@
     var rows    = [];
     var delId   = null;
     var isAdmin = false;
+    var currentDetailId = null;
+    var selectedImageFile = null;
 
     /* ===== AUTH STATE ===== */
     function setAdminUI(loggedIn) {
@@ -626,7 +689,7 @@
             var bal = t.tongConLai || 0;
             var vaoCell = vao > 0 ? '<td class="money-in">+' + money(vao) + '</td>' : '<td class="money-dash">—</td>';
             var raCell  = ra  > 0 ? '<td class="money-out">−' + money(ra)  + '</td>' : '<td class="money-dash">—</td>';
-            return '<tr>'
+            return '<tr onclick="openDetail(' + t.id + ')" style="cursor:pointer">'
                 + '<td class="stt">' + (i+1) + '</td>'
                 + '<td><span class="date-badge">' + fmtDate(t.ngay) + '</span></td>'
                 + vaoCell + raCell
@@ -634,8 +697,8 @@
                 + '<td><span class="bal ' + (bal >= 0 ? 'pos' : 'neg') + '">' + moneyFull(bal) + '</span></td>'
                 + '<td><div class="action-btns">'
                 + (isAdmin
-                    ? '<button class="btn-icon edit" onclick="openEdit(' + t.id + ')" title="Sửa">✏️</button>'
-                    + '<button class="btn-icon del" onclick="openDel(' + t.id + ')" title="Xóa">🗑️</button>'
+                    ? '<button class="btn-icon edit" onclick="event.stopPropagation(); openEdit(' + t.id + ')" title="Sửa">✏️</button>'
+                    + '<button class="btn-icon del" onclick="event.stopPropagation(); openDel(' + t.id + ')" title="Xóa">🗑️</button>'
                     : '<span style="color:#cbd5e0;font-size:18px">—</span>')
                 + '</div></td></tr>';
         }).join('');
@@ -693,6 +756,27 @@
     }
     initMoneyFields();
 
+    /* ===== IMAGE PREVIEW ===== */
+    function initImagePreview() {
+        var fileInput = document.getElementById('fAnh');
+        fileInput.addEventListener('change', function(e) {
+            var file = e.target.files[0];
+            if (file) {
+                selectedImageFile = file;
+                var reader = new FileReader();
+                reader.onload = function(event) {
+                    document.getElementById('previewImg').src = event.target.result;
+                    document.getElementById('previewAnh').style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            } else {
+                selectedImageFile = null;
+                document.getElementById('previewAnh').style.display = 'none';
+            }
+        });
+    }
+    initImagePreview();
+
     /* ===== OPEN ADD ===== */
     function openAdd() {
         document.getElementById('modalTitle').textContent = '➕ Thêm giao dịch';
@@ -701,6 +785,9 @@
         document.getElementById('fVao').value     = '';
         document.getElementById('fRa').value      = '';
         document.getElementById('fNoidung').value = '';
+        document.getElementById('fAnh').value     = '';
+        selectedImageFile = null;
+        document.getElementById('previewAnh').style.display = 'none';
         resetMoneyFields();
         document.getElementById('modalForm').classList.add('open');
         setTimeout(function(){ document.getElementById('fNgay').focus(); }, 120);
@@ -720,6 +807,14 @@
         if (t.tien_vao > 0) { document.getElementById('fRa').disabled = true;  document.getElementById('fRa').style.opacity  = '0.35'; }
         if (t.tien_ra  > 0) { document.getElementById('fVao').disabled = true; document.getElementById('fVao').style.opacity = '0.35'; }
         document.getElementById('fNoidung').value = t.noi_dung || '';
+        document.getElementById('fAnh').value     = '';
+        selectedImageFile = null;
+        if (t.anh_url) {
+            document.getElementById('previewImg').src = t.anh_url;
+            document.getElementById('previewAnh').style.display = 'block';
+        } else {
+            document.getElementById('previewAnh').style.display = 'none';
+        }
         document.getElementById('modalForm').classList.add('open');
     }
 
@@ -743,18 +838,56 @@
             noi_dung: noidung || null
         };
 
+        // Handle image upload
+        if (selectedImageFile) {
+            try {
+                var fileName = 'transaction_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                var upsert = !id; // Use upsert for new files
+                
+                var uploadRes = await db.storage
+                    .from('transaction-images')
+                    .upload(fileName, selectedImageFile, { upsert: upsert });
+                
+                if (uploadRes.error) {
+                    console.error('Upload error:', uploadRes.error);
+                    toast('Lỗi upload ảnh: ' + uploadRes.error.message, 'error');
+                    return;
+                }
+                
+                // Get public URL
+                var urlRes = db.storage
+                    .from('transaction-images')
+                    .getPublicUrl(fileName);
+                
+                if (urlRes && urlRes.data) {
+                    payload.anh_url = urlRes.data.publicUrl;
+                }
+            } catch (err) {
+                console.error('Upload exception:', err);
+                toast('Lỗi: ' + err.message, 'error');
+                return;
+            }
+        }
+
         var error;
-        if (id) {
-            var res = await db.from('transactions').update(payload).eq('id', id);
-            error = res.error;
-        } else {
-            var res = await db.from('transactions').insert(payload);
-            error = res.error;
+        try {
+            if (id) {
+                var res = await db.from('transactions').update(payload).eq('id', id);
+                error = res.error;
+            } else {
+                var res = await db.from('transactions').insert(payload);
+                error = res.error;
+            }
+        } catch (err) {
+            console.error('Database error:', err);
+            toast('Lỗi: ' + err.message, 'error');
+            return;
         }
 
         if (error) { toast('Có lỗi xảy ra: ' + error.message, 'error'); return; }
         closeModal('modalForm');
         toast(id ? 'Cập nhật thành công!' : 'Thêm giao dịch thành công!', 'success');
+        selectedImageFile = null;
         load();
     }
 
@@ -768,6 +901,47 @@
         toast('Đã xóa giao dịch!', 'success');
         delId = null;
         load();
+    }
+
+    /* ===== DETAIL MODAL ===== */
+    function openDetail(id) {
+        currentDetailId = id;
+        var t = rows.find(function(x){ return x.id === id; });
+        if (!t) return;
+        
+        // Set values
+        document.getElementById('detailNgay').textContent = fmtDate(t.ngay);
+        document.getElementById('detailVao').textContent = (t.tien_vao > 0) ? '+' + moneyFull(t.tien_vao) : '—';
+        document.getElementById('detailRa').textContent = (t.tien_ra > 0) ? '−' + moneyFull(t.tien_ra) : '—';
+        document.getElementById('detailNoidung').textContent = t.noi_dung || '—';
+        
+        var bal = t.tongConLai || 0;
+        var balEl = document.getElementById('detailBal');
+        balEl.textContent = moneyFull(bal);
+        balEl.className = bal >= 0 ? 'stat-value blue' : 'stat-value danger';
+        
+        // Show/hide image
+        if (t.anh_url) {
+            document.getElementById('detailImage').src = t.anh_url;
+            document.getElementById('detailImageBox').style.display = 'block';
+        } else {
+            document.getElementById('detailImageBox').style.display = 'none';
+        }
+        
+        // Show edit/delete buttons only for admin
+        document.getElementById('detailFooter').style.display = isAdmin ? 'flex' : 'none';
+        
+        document.getElementById('modalDetail').classList.add('open');
+    }
+
+    function editFromDetail() {
+        closeModal('modalDetail');
+        setTimeout(function(){ openEdit(currentDetailId); }, 200);
+    }
+
+    function deleteFromDetail() {
+        closeModal('modalDetail');
+        setTimeout(function(){ openDel(currentDetailId); }, 200);
     }
 
     /* ===== MODAL HELPERS ===== */
