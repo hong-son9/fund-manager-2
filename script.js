@@ -5,6 +5,7 @@ const db = IS_CONFIGURED
 
 if (!IS_CONFIGURED) {
     document.getElementById('configBanner').style.display = 'flex';
+    document.getElementById('mainContent').style.display = 'block';
     document.getElementById('tbody').innerHTML = '<tr><td colspan="7"><div class="state-box"><div class="icon">⚙️</div><h3>Chưa cấu hình Supabase</h3><p>Xem hướng dẫn ở banner phía trên</p></div></td></tr>';
 }
 
@@ -15,12 +16,17 @@ var currentDetailId = null;
 var selectedImageFile = null;
 var removeImageFlag = false;
 
+/* ===== WORKSPACE STATE ===== */
+var workspaces       = [];     // [{id,name,slug,icon,sort_order,...}]
+var currentWorkspace = null;   // workspace object đang xem (null = đang ở selector)
+var deleteWsId       = null;
+
 /* ===== AUTH STATE ===== */
 function setAdminUI(loggedIn) {
     isAdmin = loggedIn;
     document.getElementById('adminControls').style.display = loggedIn ? 'flex' : 'none';
     document.getElementById('btnLogin').style.display      = loggedIn ? 'none' : 'flex';
-    var btnQr = document.querySelector('.btn-qr');
+    var btnQr = document.getElementById('btnQr');
     var qrLbl = btnQr.querySelector('.lbl');
     if (loggedIn) {
         btnQr.classList.add('icon-only');
@@ -30,6 +36,9 @@ function setAdminUI(loggedIn) {
         qrLbl.style.display = '';
     }
     document.querySelector('table').classList.toggle('admin-mode', loggedIn);
+    updateHeaderForState();
+    // Re-render selector cards to refresh empty-state hint nếu đang ở selector
+    if (!currentWorkspace) renderWorkspaceCards();
     render();
 }
 
@@ -63,10 +72,10 @@ async function doLogout() {
 /* ===== UTILS ===== */
 function money(n) {
     if (!n || n === 0) return null;
-    return new Intl.NumberFormat('vi-VN').format(n) + '\u00a0đ';
+    return new Intl.NumberFormat('vi-VN').format(n) + ' đ';
 }
 function moneyFull(n) {
-    return new Intl.NumberFormat('vi-VN').format(n || 0) + '\u00a0đ';
+    return new Intl.NumberFormat('vi-VN').format(n || 0) + ' đ';
 }
 function fmtDate(s) {
     if (!s) return '';
@@ -76,12 +85,210 @@ function fmtDate(s) {
 function today() { return new Date().toISOString().split('T')[0]; }
 function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-/* ===== LOAD ===== */
-async function load() {
+function slugify(str) {
+    var base = str.toLowerCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/đ/g, 'd')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    if (!base) base = 'quy';
+    // Append hậu tố thời gian để chắc chắn unique
+    return base + '-' + Date.now().toString(36).slice(-5);
+}
+
+/* ===== WORKSPACE: LOAD & ROUTING ===== */
+async function loadWorkspaces() {
     if (!IS_CONFIGURED) return;
+    var { data, error } = await db
+        .from('workspaces')
+        .select('*')
+        .order('sort_order', { ascending: true })
+        .order('id',         { ascending: true });
+    if (error) { toast('Lỗi tải danh sách quỹ!', 'error'); return; }
+    workspaces = data || [];
+
+    if (workspaces.length === 1) {
+        // Chỉ có 1 quỹ → vào thẳng
+        selectWorkspace(workspaces[0]);
+    } else {
+        // 0 hoặc >1 quỹ → luôn hiện selector (theo yêu cầu: mỗi lần vào phải chọn)
+        showSelector();
+    }
+}
+
+function showSelector() {
+    currentWorkspace = null;
+    rows = [];
+    document.getElementById('workspaceSelectorScreen').style.display = 'block';
+    document.getElementById('mainContent').style.display = 'none';
+    document.title = 'Quỹ Anh Em';
+    renderWorkspaceCards();
+    updateHeaderForState();
+}
+
+function selectWorkspace(ws) {
+    currentWorkspace = ws;
+    document.getElementById('workspaceSelectorScreen').style.display = 'none';
+    document.getElementById('mainContent').style.display = 'block';
+    document.title = ws.name;
+    updateHeaderForState();
+    load();
+}
+
+function selectWorkspaceById(id) {
+    var ws = workspaces.find(function(x) { return x.id === id; });
+    if (ws) selectWorkspace(ws);
+}
+
+function backToSelector() {
+    if (workspaces.length > 1) showSelector();
+}
+
+function updateHeaderForState() {
+    var inWs     = !!currentWorkspace;
+    var hasMulti = workspaces.length > 1;
+
+    // Brand
+    var logoEl  = document.getElementById('brandLogo');
+    var titleEl = document.getElementById('brandTitle');
+    if (inWs) {
+        logoEl.textContent  = currentWorkspace.icon || '💰';
+        titleEl.textContent = currentWorkspace.name;
+    } else {
+        logoEl.textContent  = '💰';
+        titleEl.textContent = 'Quỹ Anh Em';
+    }
+
+    // Buttons (state-dependent)
+    document.getElementById('btnQr').style.display       = inWs ? 'flex' : 'none';
+    document.getElementById('btnSwitchWs').style.display = (inWs && hasMulti) ? 'flex' : 'none';
+
+    // Admin-only buttons (chỉ khi đã login)
+    if (isAdmin) {
+        document.getElementById('btnAddTx').style.display    = inWs ? 'flex' : 'none';
+        document.getElementById('btnManageWs').style.display = 'flex';
+    }
+}
+
+function renderWorkspaceCards() {
+    var grid = document.getElementById('workspaceGrid');
+    if (!grid) return;
+    if (workspaces.length === 0) {
+        grid.innerHTML = '<div class="ws-empty"><div class="icon">📂</div><h3>Chưa có quỹ nào</h3><p>' +
+            (isAdmin ? 'Nhấn nút "Quản lý quỹ" trên thanh tiêu đề để tạo quỹ đầu tiên'
+                     : 'Vui lòng đợi admin tạo quỹ') +
+            '</p></div>';
+        return;
+    }
+    grid.innerHTML = workspaces.map(function(ws) {
+        return '<div class="ws-card" onclick="selectWorkspaceById(' + ws.id + ')">' +
+            '<div class="ws-card-icon">' + (ws.icon || '💰') + '</div>' +
+            '<div class="ws-card-name">' + escHtml(ws.name) + '</div>' +
+            '<div class="ws-card-arrow">→</div>' +
+        '</div>';
+    }).join('');
+}
+
+/* ===== WORKSPACE: MANAGE (admin) ===== */
+function openManageWs() {
+    renderManageList();
+    document.getElementById('wsName').value = '';
+    document.getElementById('wsIcon').value = '';
+    document.getElementById('modalManage').classList.add('open');
+}
+
+function renderManageList() {
+    var list = document.getElementById('manageList');
+    if (workspaces.length === 0) {
+        list.innerHTML = '<div class="manage-empty">Chưa có quỹ nào</div>';
+        return;
+    }
+    list.innerHTML = workspaces.map(function(ws) {
+        return '<div class="manage-item">' +
+            '<div class="manage-item-info">' +
+                '<span class="manage-item-icon">' + (ws.icon || '💰') + '</span>' +
+                '<span class="manage-item-name">' + escHtml(ws.name) + '</span>' +
+            '</div>' +
+            '<button class="btn-icon del" onclick="confirmDeleteWorkspace(' + ws.id + ')" title="Xóa quỹ">🗑️</button>' +
+        '</div>';
+    }).join('');
+}
+
+async function addWorkspace() {
+    var name = document.getElementById('wsName').value.trim();
+    var icon = document.getElementById('wsIcon').value.trim() || '💰';
+    if (!name) { toast('Vui lòng nhập tên quỹ!', 'error'); return; }
+
+    var slug = slugify(name);
+    var { error } = await db.from('workspaces').insert({
+        name: name,
+        slug: slug,
+        icon: icon,
+        sort_order: workspaces.length
+    });
+    if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+
+    document.getElementById('wsName').value = '';
+    document.getElementById('wsIcon').value = '';
+    toast('Đã thêm quỹ "' + name + '"!', 'success');
+
+    await loadWorkspacesPreserveCurrent();
+    renderManageList();
+}
+
+function confirmDeleteWorkspace(id) {
+    var ws = workspaces.find(function(x){ return x.id === id; });
+    if (!ws) return;
+    deleteWsId = id;
+    document.getElementById('delWsName').textContent = ws.name;
+    document.getElementById('modalDelWs').classList.add('open');
+}
+
+async function doDeleteWorkspace() {
+    if (!deleteWsId) return;
+    var deletedId = deleteWsId;
+    var { error } = await db.from('workspaces').delete().eq('id', deletedId);
+    if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+    closeModal('modalDelWs');
+    toast('Đã xóa quỹ!', 'success');
+    deleteWsId = null;
+
+    var wasCurrent = currentWorkspace && currentWorkspace.id === deletedId;
+    if (wasCurrent) {
+        // Quỹ đang xem bị xóa → quay về selector
+        currentWorkspace = null;
+        await loadWorkspaces();   // sẽ tự routing
+    } else {
+        await loadWorkspacesPreserveCurrent();
+    }
+    renderManageList();
+}
+
+// Reload workspaces nhưng KHÔNG đổi màn hình hiện tại (dùng khi đang ở manage modal)
+async function loadWorkspacesPreserveCurrent() {
+    var { data, error } = await db
+        .from('workspaces')
+        .select('*')
+        .order('sort_order', { ascending: true })
+        .order('id',         { ascending: true });
+    if (error) return;
+    workspaces = data || [];
+    // Đồng bộ object currentWorkspace nếu nó vẫn còn
+    if (currentWorkspace) {
+        var fresh = workspaces.find(function(x){ return x.id === currentWorkspace.id; });
+        if (fresh) currentWorkspace = fresh;
+    }
+    if (!currentWorkspace) renderWorkspaceCards();
+    updateHeaderForState();
+}
+
+/* ===== LOAD TRANSACTIONS ===== */
+async function load() {
+    if (!IS_CONFIGURED || !currentWorkspace) return;
     var { data, error } = await db
         .from('transactions')
         .select('*')
+        .eq('workspace_id', currentWorkspace.id)
         .order('ngay', { ascending: true })
         .order('id',   { ascending: true });
 
@@ -102,10 +309,13 @@ async function load() {
 /* ===== RENDER ===== */
 function render() {
     var tbody = document.getElementById('tbody');
+    if (!tbody) return;
     document.getElementById('recCount').textContent = rows.length + ' giao dịch';
 
     if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7"><div class="state-box"><div class="icon">📭</div><h3>Chưa có giao dịch nào</h3><p>Nhấn "Thêm giao dịch" để bắt đầu</p></div></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7"><div class="state-box"><div class="icon">📭</div><h3>Chưa có giao dịch nào</h3><p>' +
+            (isAdmin ? 'Nhấn "Thêm giao dịch" để bắt đầu' : 'Quỹ này chưa có giao dịch') +
+            '</p></div></td></tr>';
         return;
     }
 
@@ -217,6 +427,7 @@ initImagePreview();
 
 /* ===== OPEN ADD ===== */
 function openAdd() {
+    if (!currentWorkspace) { toast('Hãy chọn quỹ trước!', 'error'); return; }
     document.getElementById('modalTitle').textContent = '➕ Thêm giao dịch';
     document.getElementById('fId').value      = '';
     document.getElementById('fNgay').value    = today();
@@ -243,7 +454,6 @@ function openEdit(id) {
     resetMoneyFields();
     document.getElementById('fVao').value     = t.tien_vao > 0 ? t.tien_vao : '';
     document.getElementById('fRa').value      = t.tien_ra  > 0 ? t.tien_ra  : '';
-    // Disable field còn lại nếu đã có giá trị
     if (t.tien_vao > 0) { document.getElementById('fRa').disabled = true;  document.getElementById('fRa').style.opacity  = '0.35'; }
     if (t.tien_ra  > 0) { document.getElementById('fVao').disabled = true; document.getElementById('fVao').style.opacity = '0.35'; }
     document.getElementById('fNoidung').value = t.noi_dung || '';
@@ -263,6 +473,7 @@ function openEdit(id) {
 
 /* ===== SAVE ===== */
 async function save() {
+    if (!currentWorkspace) { toast('Không xác định được quỹ!', 'error'); return; }
     var id      = document.getElementById('fId').value;
     var ngay    = document.getElementById('fNgay').value;
     var vao     = document.getElementById('fVao').value;
@@ -278,30 +489,30 @@ async function save() {
         ngay:     ngay,
         tien_vao: vao ? parseFloat(vao) : 0,
         tien_ra:  ra  ? parseFloat(ra)  : 0,
-        noi_dung: noidung || null
+        noi_dung: noidung || null,
+        workspace_id: currentWorkspace.id
     };
 
     // Handle image upload
     if (selectedImageFile) {
         try {
             var fileName = 'transaction_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-            var upsert = !id; // Use upsert for new files
-            
+            var upsert = !id;
+
             var uploadRes = await db.storage
                 .from('transaction-images')
                 .upload(fileName, selectedImageFile, { upsert: upsert });
-            
+
             if (uploadRes.error) {
                 console.error('Upload error:', uploadRes.error);
                 toast('Lỗi upload ảnh: ' + uploadRes.error.message, 'error');
                 return;
             }
-            
-            // Get public URL
+
             var urlRes = db.storage
                 .from('transaction-images')
                 .getPublicUrl(fileName);
-            
+
             if (urlRes && urlRes.data) {
                 payload.anh_url = urlRes.data.publicUrl;
             }
@@ -317,11 +528,14 @@ async function save() {
     var error;
     try {
         if (id) {
-            var res = await db.from('transactions').update(payload).eq('id', id);
-            error = res.error;
+            // Khi update, KHÔNG đổi workspace_id (giữ nguyên), tránh việc move giao dịch sang quỹ khác bằng nhầm
+            var updatePayload = Object.assign({}, payload);
+            delete updatePayload.workspace_id;
+            var resU = await db.from('transactions').update(updatePayload).eq('id', id);
+            error = resU.error;
         } else {
-            var res = await db.from('transactions').insert(payload);
-            error = res.error;
+            var resI = await db.from('transactions').insert(payload);
+            error = resI.error;
         }
     } catch (err) {
         console.error('Database error:', err);
@@ -353,19 +567,17 @@ function openDetail(id) {
     currentDetailId = id;
     var t = rows.find(function(x){ return x.id === id; });
     if (!t) return;
-    
-    // Set values
+
     document.getElementById('detailNgay').textContent = fmtDate(t.ngay);
     document.getElementById('detailVao').textContent = (t.tien_vao > 0) ? '+' + moneyFull(t.tien_vao) : '—';
     document.getElementById('detailRa').textContent = (t.tien_ra > 0) ? '−' + moneyFull(t.tien_ra) : '—';
     document.getElementById('detailNoidung').textContent = t.noi_dung || '—';
-    
+
     var bal = t.tongConLai || 0;
     var balEl = document.getElementById('detailBal');
     balEl.textContent = moneyFull(bal);
     balEl.className = bal >= 0 ? 'stat-value blue' : 'stat-value danger';
-    
-    // Show/hide image
+
     if (t.anh_url) {
         var detailImg = document.getElementById('detailImage');
         detailImg.src = t.anh_url;
@@ -375,10 +587,9 @@ function openDetail(id) {
     } else {
         document.getElementById('detailImageBox').style.display = 'none';
     }
-    
-    // Show edit/delete buttons only for admin
+
     document.getElementById('detailFooter').style.display = isAdmin ? 'flex' : 'none';
-    
+
     document.getElementById('modalDetail').classList.add('open');
 }
 
@@ -440,4 +651,4 @@ function copySTK() {
 }
 
 /* ===== INIT ===== */
-load();
+loadWorkspaces();

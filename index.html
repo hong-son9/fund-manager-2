@@ -14,18 +14,26 @@
 <header class="header">
     <div class="header-inner">
         <div class="brand">
-            <div class="brand-logo">💰</div>
+            <div class="brand-logo" id="brandLogo">💰</div>
             <div>
-                <h1>Quỹ 500 Anh Em</h1>
+                <h1 id="brandTitle">Quỹ Anh Em</h1>
             </div>
         </div>
         <div style="display:flex;gap:10px;align-items:center;flex-shrink:0">
-            <button class="btn-qr" onclick="openQR()">
+            <button id="btnSwitchWs" class="btn-switch-ws" onclick="backToSelector()" title="Đổi quỹ" style="display:none">
+                <span style="font-size:16px;line-height:1">⇄</span>
+                <span class="lbl">Đổi quỹ</span>
+            </button>
+            <button id="btnQr" class="btn-qr" onclick="openQR()" style="display:none">
                 <span>📲</span>
                 <span class="lbl">Chuyển tiền</span>
             </button>
             <div id="adminControls" style="display:none;gap:10px;align-items:center">
-                <button class="btn-add" onclick="openAdd()">
+                <button id="btnManageWs" class="btn-manage-ws" onclick="openManageWs()" title="Quản lý quỹ">
+                    <span style="font-size:14px;line-height:1">⚙️</span>
+                    <span class="lbl">Quản lý quỹ</span>
+                </button>
+                <button id="btnAddTx" class="btn-add" onclick="openAdd()" style="display:none">
                     <span style="font-size:18px;line-height:1">+</span>
                     <span class="lbl">Thêm giao dịch</span>
                 </button>
@@ -64,7 +72,17 @@
     </div>
 </div>
 
-<main class="main">
+<!-- WORKSPACE SELECTOR SCREEN -->
+<section id="workspaceSelectorScreen" class="workspace-selector" style="display:none">
+    <div class="ws-header">
+        <div class="ws-icon-big">💰</div>
+        <h2>Chọn quỹ</h2>
+        <p class="ws-subtitle">Chọn 1 quỹ để xem giao dịch</p>
+    </div>
+    <div class="ws-grid" id="workspaceGrid"></div>
+</section>
+
+<main class="main" id="mainContent" style="display:none">
 
     <!-- Config warning nếu chưa cài key -->
     <div class="config-banner" id="configBanner" style="display:none">
@@ -241,6 +259,55 @@
             <button class="btn btn-ghost" onclick="closeModal('modalDetail')">Đóng</button>
             <button class="btn btn-primary" onclick="editFromDetail()" title="Sửa">✏️ Sửa</button>
             <button class="btn btn-red" onclick="deleteFromDetail()" title="Xóa">🗑️ Xóa</button>
+        </div>
+    </div>
+</div>
+
+<!-- MANAGE WORKSPACES MODAL (admin only) -->
+<div class="overlay" id="modalManage">
+    <div class="modal" style="max-width:480px">
+        <div class="modal-head">
+            <h3>⚙️ Quản lý quỹ</h3>
+            <button class="modal-x" onclick="closeModal('modalManage')">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="manage-section">
+                <h4>Danh sách quỹ hiện có</h4>
+                <div class="manage-list" id="manageList"></div>
+            </div>
+            <div class="manage-section" style="margin-bottom:0">
+                <h4>➕ Thêm quỹ mới</h4>
+                <div class="ws-form-row">
+                    <div class="form-group" style="margin-bottom:0">
+                        <label>Icon</label>
+                        <input type="text" class="form-control" id="wsIcon" placeholder="💰" maxlength="4" style="text-align:center;font-size:18px">
+                    </div>
+                    <div class="form-group" style="margin-bottom:0">
+                        <label>Tên quỹ <span class="req">*</span></label>
+                        <input type="text" class="form-control" id="wsName" placeholder="VD: Quỹ Du Lịch"
+                            onkeydown="if(event.key==='Enter') addWorkspace()">
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-foot">
+            <button class="btn btn-ghost" onclick="closeModal('modalManage')">Đóng</button>
+            <button class="btn btn-primary" onclick="addWorkspace()">➕ Thêm quỹ</button>
+        </div>
+    </div>
+</div>
+
+<!-- DELETE WORKSPACE CONFIRM -->
+<div class="overlay" id="modalDelWs">
+    <div class="modal" style="max-width:400px">
+        <div class="confirm-body">
+            <div class="icon">⚠️</div>
+            <h3>Xóa quỹ <span id="delWsName" style="color:var(--danger)"></span>?</h3>
+            <p>Toàn bộ giao dịch của quỹ này sẽ bị xóa theo và <strong>không thể khôi phục</strong>.<br>Bạn có chắc chắn muốn xóa?</p>
+        </div>
+        <div class="modal-foot">
+            <button class="btn btn-ghost" onclick="closeModal('modalDelWs')">Hủy</button>
+            <button class="btn btn-red" onclick="doDeleteWorkspace()">🗑️ Xóa quỹ</button>
         </div>
     </div>
 </div>
