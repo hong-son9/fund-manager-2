@@ -424,6 +424,60 @@ body {
     gap: 12px;
 }
 
+/* Toggle hiển thị công khai (form thêm quỹ) */
+.ws-public-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    padding: 11px 14px;
+    background: #fafbff;
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    user-select: none;
+    transition: var(--transition);
+}
+.ws-public-toggle:hover {
+    border-color: rgba(102, 126, 234, 0.4);
+    background: white;
+}
+.ws-public-toggle input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--primary);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+/* Badge trạng thái + nhóm action trong manage-item */
+.manage-item-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+.ws-vis-badge {
+    font-size: 10px;
+    padding: 3px 9px;
+    border-radius: 10px;
+    font-weight: 700;
+    letter-spacing: .3px;
+    text-transform: uppercase;
+    margin-left: 4px;
+    flex-shrink: 0;
+}
+.ws-vis-badge.public  { background: #d1fae5; color: #047857; }
+.ws-vis-badge.private { background: #fee2e2; color: #b91c1c; }
+
+/* Nút bật/tắt visibility trong manage list */
+.btn-icon.vis.on  { background: #d1fae5; color: #047857; }
+.btn-icon.vis.on:hover  { background: #10b981; color: white; transform: scale(1.15); }
+.btn-icon.vis.off { background: #fee2e2; color: #b91c1c; }
+.btn-icon.vis.off:hover { background: #ef4444; color: white; transform: scale(1.15); }
+.btn-icon.vis:active { transform: scale(0.95); }
+
 /* ===== STATS ===== */
 .stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 18px; margin-bottom: 24px; }
 .stat-card {

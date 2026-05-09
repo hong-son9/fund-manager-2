@@ -17,12 +17,14 @@ var selectedImageFile = null;
 var removeImageFlag = false;
 
 /* ===== WORKSPACE STATE ===== */
-var workspaces       = [];     // [{id,name,slug,icon,sort_order,...}]
-var currentWorkspace = null;   // workspace object đang xem (null = đang ở selector)
-var deleteWsId       = null;
+var workspaces           = [];     // [{id,name,slug,icon,sort_order,is_public,...}]
+var currentWorkspace     = null;   // workspace object đang xem (null = đang ở selector)
+var deleteWsId           = null;
+var workspacesInitialized = false; // đã fetch workspace lần đầu chưa
 
 /* ===== AUTH STATE ===== */
 function setAdminUI(loggedIn) {
+    var changed = isAdmin !== loggedIn;
     isAdmin = loggedIn;
     document.getElementById('adminControls').style.display = loggedIn ? 'flex' : 'none';
     document.getElementById('btnLogin').style.display      = loggedIn ? 'none' : 'flex';
@@ -40,6 +42,20 @@ function setAdminUI(loggedIn) {
     // Re-render selector cards to refresh empty-state hint nếu đang ở selector
     if (!currentWorkspace) renderWorkspaceCards();
     render();
+
+    // Khi auth state đổi, danh sách quỹ thấy được có thể đổi (admin thấy hết, khách chỉ thấy is_public)
+    // => fetch lại workspaces.
+    if (changed && IS_CONFIGURED && workspacesInitialized) {
+        if (currentWorkspace) {
+            loadWorkspacesPreserveCurrent().then(function() {
+                // Nếu quỹ đang xem bị ẩn và user vừa logout -> không thấy nữa, kick về selector
+                var still = workspaces.find(function(w){ return w.id === currentWorkspace.id; });
+                if (!still) showSelector();
+            });
+        } else {
+            loadWorkspaces();
+        }
+    }
 }
 
 if (IS_CONFIGURED) {
@@ -106,6 +122,7 @@ async function loadWorkspaces() {
         .order('id',         { ascending: true });
     if (error) { toast('Lỗi tải danh sách quỹ!', 'error'); return; }
     workspaces = data || [];
+    workspacesInitialized = true;
 
     if (workspaces.length === 1) {
         // Chỉ có 1 quỹ → vào thẳng
@@ -194,6 +211,7 @@ function openManageWs() {
     renderManageList();
     document.getElementById('wsName').value = '';
     document.getElementById('wsIcon').value = '';
+    document.getElementById('wsPublic').checked = true;
     document.getElementById('modalManage').classList.add('open');
 }
 
@@ -204,19 +222,42 @@ function renderManageList() {
         return;
     }
     list.innerHTML = workspaces.map(function(ws) {
+        var isPub = ws.is_public !== false; // default treat as public if cột chưa có
+        var visBtn = isPub
+            ? '<button class="btn-icon vis on"  onclick="toggleWsVisibility(' + ws.id + ')" title="Đang công khai — bấm để ẩn">👁️</button>'
+            : '<button class="btn-icon vis off" onclick="toggleWsVisibility(' + ws.id + ')" title="Đang ẩn — bấm để công khai">🔒</button>';
+        var badge = isPub
+            ? '<span class="ws-vis-badge public">Công khai</span>'
+            : '<span class="ws-vis-badge private">Đã ẩn</span>';
         return '<div class="manage-item">' +
             '<div class="manage-item-info">' +
                 '<span class="manage-item-icon">' + (ws.icon || '💰') + '</span>' +
                 '<span class="manage-item-name">' + escHtml(ws.name) + '</span>' +
+                badge +
             '</div>' +
-            '<button class="btn-icon del" onclick="confirmDeleteWorkspace(' + ws.id + ')" title="Xóa quỹ">🗑️</button>' +
+            '<div class="manage-item-actions">' +
+                visBtn +
+                '<button class="btn-icon del" onclick="confirmDeleteWorkspace(' + ws.id + ')" title="Xóa quỹ">🗑️</button>' +
+            '</div>' +
         '</div>';
     }).join('');
+}
+
+async function toggleWsVisibility(id) {
+    var ws = workspaces.find(function(x){ return x.id === id; });
+    if (!ws) return;
+    var newVal = !(ws.is_public !== false);
+    var { error } = await db.from('workspaces').update({ is_public: newVal }).eq('id', id);
+    if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+    toast(newVal ? 'Đã công khai quỹ "' + ws.name + '"' : 'Đã ẩn quỹ "' + ws.name + '" với người xem', 'success');
+    await loadWorkspacesPreserveCurrent();
+    renderManageList();
 }
 
 async function addWorkspace() {
     var name = document.getElementById('wsName').value.trim();
     var icon = document.getElementById('wsIcon').value.trim() || '💰';
+    var isPublic = document.getElementById('wsPublic').checked;
     if (!name) { toast('Vui lòng nhập tên quỹ!', 'error'); return; }
 
     var slug = slugify(name);
@@ -224,12 +265,14 @@ async function addWorkspace() {
         name: name,
         slug: slug,
         icon: icon,
-        sort_order: workspaces.length
+        sort_order: workspaces.length,
+        is_public: isPublic
     });
     if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
 
     document.getElementById('wsName').value = '';
     document.getElementById('wsIcon').value = '';
+    document.getElementById('wsPublic').checked = true;
     toast('Đã thêm quỹ "' + name + '"!', 'success');
 
     await loadWorkspacesPreserveCurrent();
