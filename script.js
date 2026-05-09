@@ -148,8 +148,20 @@ function selectWorkspace(ws) {
     document.getElementById('workspaceSelectorScreen').style.display = 'none';
     document.getElementById('mainContent').style.display = 'block';
     document.title = ws.name;
+    applyWorkspaceLayout();
     updateHeaderForState();
     load();
+}
+
+function isTrip(ws) { return ws && ws.type === 'trip'; }
+
+// Đổi tiêu đề cột 6 + ẩn/hiện Ghi chú trong form theo type của quỹ hiện tại
+function applyWorkspaceLayout() {
+    var trip = isTrip(currentWorkspace);
+    var col6 = document.getElementById('colHead6');
+    if (col6) col6.textContent = trip ? 'Ghi Chú' : 'Tổng Còn Lại';
+    var grp = document.getElementById('fGhiChuGroup');
+    if (grp) grp.style.display = trip ? 'block' : 'none';
 }
 
 function selectWorkspaceById(id) {
@@ -212,6 +224,8 @@ function openManageWs() {
     document.getElementById('wsName').value = '';
     document.getElementById('wsIcon').value = '';
     document.getElementById('wsPublic').checked = true;
+    var defaultRadio = document.querySelector('input[name="wsType"][value="cashflow"]');
+    if (defaultRadio) defaultRadio.checked = true;
     document.getElementById('modalManage').classList.add('open');
 }
 
@@ -226,14 +240,17 @@ function renderManageList() {
         var visBtn = isPub
             ? '<button class="btn-icon vis on"  onclick="toggleWsVisibility(' + ws.id + ')" title="Đang công khai — bấm để ẩn">👁️</button>'
             : '<button class="btn-icon vis off" onclick="toggleWsVisibility(' + ws.id + ')" title="Đang ẩn — bấm để công khai">🔒</button>';
-        var badge = isPub
+        var badgeVis = isPub
             ? '<span class="ws-vis-badge public">Công khai</span>'
             : '<span class="ws-vis-badge private">Đã ẩn</span>';
+        var badgeType = (ws.type === 'trip')
+            ? '<span class="ws-type-badge trip">✈️ Đóng quỹ</span>'
+            : '<span class="ws-type-badge cashflow">📊 Sổ thu/chi</span>';
         return '<div class="manage-item">' +
             '<div class="manage-item-info">' +
                 '<span class="manage-item-icon">' + (ws.icon || '💰') + '</span>' +
                 '<span class="manage-item-name">' + escHtml(ws.name) + '</span>' +
-                badge +
+                badgeType + badgeVis +
             '</div>' +
             '<div class="manage-item-actions">' +
                 visBtn +
@@ -258,6 +275,8 @@ async function addWorkspace() {
     var name = document.getElementById('wsName').value.trim();
     var icon = document.getElementById('wsIcon').value.trim() || '💰';
     var isPublic = document.getElementById('wsPublic').checked;
+    var typeEl   = document.querySelector('input[name="wsType"]:checked');
+    var type     = typeEl ? typeEl.value : 'cashflow';
     if (!name) { toast('Vui lòng nhập tên quỹ!', 'error'); return; }
 
     var slug = slugify(name);
@@ -266,13 +285,16 @@ async function addWorkspace() {
         slug: slug,
         icon: icon,
         sort_order: workspaces.length,
-        is_public: isPublic
+        is_public: isPublic,
+        type: type
     });
     if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
 
     document.getElementById('wsName').value = '';
     document.getElementById('wsIcon').value = '';
     document.getElementById('wsPublic').checked = true;
+    var defaultRadio = document.querySelector('input[name="wsType"][value="cashflow"]');
+    if (defaultRadio) defaultRadio.checked = true;
     toast('Đã thêm quỹ "' + name + '"!', 'success');
 
     await loadWorkspacesPreserveCurrent();
@@ -362,18 +384,22 @@ function render() {
         return;
     }
 
+    var trip = isTrip(currentWorkspace);
     tbody.innerHTML = rows.map(function(t, i) {
         var vao = t.tien_vao || 0;
         var ra  = t.tien_ra  || 0;
         var bal = t.tongConLai || 0;
         var vaoCell = vao > 0 ? '<td class="money-in">+' + money(vao) + '</td>' : '<td class="money-dash">—</td>';
         var raCell  = ra  > 0 ? '<td class="money-out">−' + money(ra)  + '</td>' : '<td class="money-dash">—</td>';
+        var col6 = trip
+            ? '<td class="ghi-chu">' + (t.ghi_chu ? escHtml(t.ghi_chu) : '<span style="color:#cbd5e0">—</span>') + '</td>'
+            : '<td><span class="bal ' + (bal >= 0 ? 'pos' : 'neg') + '">' + moneyFull(bal) + '</span></td>';
         return '<tr onclick="openDetail(' + t.id + ')" style="cursor:pointer">'
             + '<td class="stt">' + (i+1) + '</td>'
             + '<td><span class="date-badge">' + fmtDate(t.ngay) + '</span></td>'
             + vaoCell + raCell
             + '<td class="noidung">' + (t.noi_dung ? escHtml(t.noi_dung) : '<span style="color:#cbd5e0">—</span>') + '</td>'
-            + '<td><span class="bal ' + (bal >= 0 ? 'pos' : 'neg') + '">' + moneyFull(bal) + '</span></td>'
+            + col6
             + '<td><div class="action-btns">'
             + (isAdmin
                 ? '<button class="btn-icon edit" onclick="event.stopPropagation(); openEdit(' + t.id + ')" title="Sửa">✏️</button>'
@@ -477,6 +503,7 @@ function openAdd() {
     document.getElementById('fVao').value     = '';
     document.getElementById('fRa').value      = '';
     document.getElementById('fNoidung').value = '';
+    document.getElementById('fGhiChu').value  = '';
     document.getElementById('fAnh').value     = '';
     selectedImageFile = null;
     removeImageFlag = false;
@@ -500,6 +527,7 @@ function openEdit(id) {
     if (t.tien_vao > 0) { document.getElementById('fRa').disabled = true;  document.getElementById('fRa').style.opacity  = '0.35'; }
     if (t.tien_ra  > 0) { document.getElementById('fVao').disabled = true; document.getElementById('fVao').style.opacity = '0.35'; }
     document.getElementById('fNoidung').value = t.noi_dung || '';
+    document.getElementById('fGhiChu').value  = t.ghi_chu || '';
     document.getElementById('fAnh').value     = '';
     selectedImageFile = null;
     removeImageFlag = false;
@@ -522,6 +550,7 @@ async function save() {
     var vao     = document.getElementById('fVao').value;
     var ra      = document.getElementById('fRa').value;
     var noidung = document.getElementById('fNoidung').value.trim();
+    var ghichu  = document.getElementById('fGhiChu').value.trim();
 
     if (!ngay)      { toast('Vui lòng chọn ngày!', 'error'); return; }
     var year = parseInt(ngay.split('-')[0]);
@@ -533,6 +562,7 @@ async function save() {
         tien_vao: vao ? parseFloat(vao) : 0,
         tien_ra:  ra  ? parseFloat(ra)  : 0,
         noi_dung: noidung || null,
+        ghi_chu:  ghichu  || null,
         workspace_id: currentWorkspace.id
     };
 
@@ -616,10 +646,18 @@ function openDetail(id) {
     document.getElementById('detailRa').textContent = (t.tien_ra > 0) ? '−' + moneyFull(t.tien_ra) : '—';
     document.getElementById('detailNoidung').textContent = t.noi_dung || '—';
 
-    var bal = t.tongConLai || 0;
-    var balEl = document.getElementById('detailBal');
-    balEl.textContent = moneyFull(bal);
-    balEl.className = bal >= 0 ? 'stat-value blue' : 'stat-value danger';
+    // Trip workspace -> hiện Ghi chú, ẩn Số dư. Cashflow -> ngược lại.
+    var trip = isTrip(currentWorkspace);
+    document.getElementById('detailGhiChuBox').style.display = trip ? 'block' : 'none';
+    document.getElementById('detailBalBox').style.display    = trip ? 'none'  : 'block';
+    if (trip) {
+        document.getElementById('detailGhiChu').textContent = t.ghi_chu || '—';
+    } else {
+        var bal = t.tongConLai || 0;
+        var balEl = document.getElementById('detailBal');
+        balEl.textContent = moneyFull(bal);
+        balEl.className = bal >= 0 ? 'stat-value blue' : 'stat-value danger';
+    }
 
     if (t.anh_url) {
         var detailImg = document.getElementById('detailImage');

@@ -133,7 +133,7 @@
                         <th style="width:160px">Tiền Vào</th>
                         <th style="width:160px">Tiền Ra</th>
                         <th>Nội Dung</th>
-                        <th style="width:170px">Tổng Còn Lại</th>
+                        <th id="colHead6" style="width:170px">Tổng Còn Lại</th>
                         <th style="width:100px">Thao Tác</th>
                     </tr>
                 </thead>
@@ -177,6 +177,10 @@
             <div class="form-group" style="margin-bottom:0">
                 <label>Nội dung</label>
                 <textarea class="form-control" id="fNoidung" placeholder="Mô tả giao dịch..."></textarea>
+            </div>
+            <div class="form-group" id="fGhiChuGroup" style="margin-bottom:0; display:none">
+                <label>📌 Ghi chú</label>
+                <textarea class="form-control" id="fGhiChu" placeholder="VD: Đã đóng đủ / Còn thiếu 500k..." style="min-height:60px"></textarea>
             </div>
             <div class="form-group" style="margin-bottom:0">
                 <label>Ảnh (tùy chọn)</label>
@@ -247,9 +251,15 @@
                     <div style="font-size: 12px; font-weight: 700; color: #4a5568; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px;">📝 Nội Dung</div>
                     <div style="font-size: 14px; color: #4a5568; line-height: 1.6; word-wrap: break-word;" id="detailNoidung">—</div>
                 </div>
-                
-                <!-- Số dư -->
-                <div>
+
+                <!-- Ghi chú (chỉ workspace type=trip) -->
+                <div id="detailGhiChuBox" style="display:none">
+                    <div style="font-size: 12px; font-weight: 700; color: #4a5568; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px;">📌 Ghi Chú</div>
+                    <div style="font-size: 14px; color: #4a5568; line-height: 1.6; word-wrap: break-word;" id="detailGhiChu">—</div>
+                </div>
+
+                <!-- Số dư (chỉ workspace type=cashflow) -->
+                <div id="detailBalBox">
                     <div style="font-size: 12px; font-weight: 700; color: #4a5568; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px;">💵 Số Dư Còn Lại</div>
                     <div style="font-size: 15px; font-weight: 700;" id="detailBal">—</div>
                 </div>
@@ -288,7 +298,25 @@
                             onkeydown="if(event.key==='Enter') addWorkspace()">
                     </div>
                 </div>
-                <label class="ws-public-toggle" style="margin-top:12px">
+                <div class="ws-type-row" style="margin-top:12px">
+                    <label class="ws-type-opt">
+                        <input type="radio" name="wsType" value="cashflow" checked>
+                        <span class="ws-type-icon">📊</span>
+                        <span class="ws-type-text">
+                            <strong>Sổ thu/chi</strong>
+                            <small>Cột "Tổng còn lại"</small>
+                        </span>
+                    </label>
+                    <label class="ws-type-opt">
+                        <input type="radio" name="wsType" value="trip">
+                        <span class="ws-type-icon">✈️</span>
+                        <span class="ws-type-text">
+                            <strong>Đóng quỹ</strong>
+                            <small>Cột "Ghi chú"</small>
+                        </span>
+                    </label>
+                </div>
+                <label class="ws-public-toggle" style="margin-top:10px">
                     <input type="checkbox" id="wsPublic" checked>
                     <span>👁️ Cho người xem (chưa đăng nhập) thấy quỹ này</span>
                 </label>

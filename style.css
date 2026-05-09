@@ -478,6 +478,90 @@ body {
 .btn-icon.vis.off:hover { background: #ef4444; color: white; transform: scale(1.15); }
 .btn-icon.vis:active { transform: scale(0.95); }
 
+/* Cột Ghi chú (workspace type=trip) */
+td.ghi-chu {
+    color: #4a5568;
+    font-size: 13px;
+    line-height: 1.5;
+    max-width: 200px;
+    word-wrap: break-word;
+    white-space: normal;
+}
+
+/* Type badge trong manage list */
+.ws-type-badge {
+    font-size: 10px;
+    padding: 3px 9px;
+    border-radius: 10px;
+    font-weight: 700;
+    letter-spacing: .3px;
+    margin-left: 4px;
+    flex-shrink: 0;
+}
+.ws-type-badge.cashflow { background: #e0e7ff; color: #3730a3; }
+.ws-type-badge.trip     { background: #fef3c7; color: #92400e; }
+
+/* Type radio (form thêm quỹ) */
+.ws-type-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+.ws-type-opt {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: #fafbff;
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: var(--transition);
+    user-select: none;
+}
+.ws-type-opt:hover {
+    border-color: rgba(102,126,234,.4);
+    background: white;
+}
+.ws-type-opt input[type="radio"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--primary);
+    cursor: pointer;
+    flex-shrink: 0;
+    margin: 0;
+}
+.ws-type-opt input[type="radio"]:checked ~ .ws-type-icon {
+    transform: scale(1.15);
+}
+.ws-type-opt:has(input[type="radio"]:checked) {
+    border-color: var(--primary);
+    background: white;
+    box-shadow: 0 0 0 3px rgba(102,126,234,.12);
+}
+.ws-type-icon {
+    font-size: 22px;
+    line-height: 1;
+    transition: var(--transition);
+}
+.ws-type-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.ws-type-text strong {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+}
+.ws-type-text small {
+    font-size: 10px;
+    color: var(--text-light);
+    text-transform: uppercase;
+    letter-spacing: .3px;
+}
+
 /* ===== STATS ===== */
 .stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 18px; margin-bottom: 24px; }
 .stat-card {
@@ -912,6 +996,8 @@ textarea.form-control {
     .ws-card-icon { width: 64px; height: 64px; font-size: 30px; }
     .ws-card-name { font-size: 15px; }
     .ws-form-row { grid-template-columns: 70px 1fr; gap: 10px; }
+    .ws-type-row { grid-template-columns: 1fr; gap: 8px; }
+    td.ghi-chu { max-width: 140px; font-size: 11px; }
     .modal { margin: 12px; }
     .modal-head { padding: 16px 20px; }
     .modal-head h3 { font-size: 16px; }
