@@ -133,6 +133,29 @@
         </div>
     </div>
 
+    <!-- Target card (chỉ hiện với workspace type=trip) -->
+    <section class="target-card" id="targetCard" hidden aria-label="Mục tiêu quỹ">
+        <div class="target-main">
+            <div class="target-label">
+                🎯 MỤC TIÊU QUỸ
+            </div>
+            <div class="target-amount num" id="targetAmount">0 đ</div>
+            <div class="target-people">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                <span id="targetPeople">0 người</span>
+            </div>
+        </div>
+        <div class="target-progress">
+            <div class="target-progress-info">
+                <span>Đã thu <strong class="num" id="targetCollected">0 đ</strong></span>
+                <span class="target-percent num" id="targetPercent">0%</span>
+            </div>
+            <div class="target-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div class="target-bar-fill" id="targetBarFill" style="width:0%"></div>
+            </div>
+        </div>
+    </section>
+
     <!-- Stats -->
     <section class="stats" aria-label="Tổng quan tài chính">
         <div class="stat-card green">
@@ -169,6 +192,23 @@
         <div class="table-head">
             <h2>📋 Lịch sử giao dịch</h2>
             <span class="badge" id="recCount">0 giao dịch</span>
+        </div>
+        <div class="filter-bar" id="filterBar">
+            <div class="filter-search">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input type="search" id="fltQuery" placeholder="Tìm nội dung, ghi chú..." aria-label="Tìm kiếm giao dịch">
+            </div>
+            <div class="filter-dates">
+                <input type="month" id="fltFrom" aria-label="Từ tháng" min="2000-01" max="2099-12" title="Từ tháng">
+                <span class="filter-sep" aria-hidden="true">→</span>
+                <input type="month" id="fltTo" aria-label="Đến tháng" min="2000-01" max="2099-12" title="Đến tháng">
+            </div>
+            <button class="filter-clear" id="fltClear" type="button" hidden>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                Xoá lọc
+            </button>
         </div>
         <div class="table-wrap">
             <table>
@@ -214,11 +254,11 @@
             <div class="form-row">
                 <div class="form-group">
                     <label for="fVao">Tiền vào (đ)</label>
-                    <input type="number" class="form-control num" id="fVao" placeholder="0" min="0" step="1000" inputmode="numeric">
+                    <input type="text" class="form-control num money-input" id="fVao" placeholder="0" inputmode="numeric" autocomplete="off">
                 </div>
                 <div class="form-group">
                     <label for="fRa">Tiền ra (đ)</label>
-                    <input type="number" class="form-control num" id="fRa" placeholder="0" min="0" step="1000" inputmode="numeric">
+                    <input type="text" class="form-control num money-input" id="fRa" placeholder="0" inputmode="numeric" autocomplete="off">
                 </div>
             </div>
             <div class="form-group" style="margin-bottom:0">
@@ -349,9 +389,23 @@
                         </span>
                     </label>
                 </div>
+                <div class="ws-trip-extra">
+                    <div class="form-group" style="margin-bottom:0">
+                        <label for="wsTargetAmount">💵 Tiền/người (đ)</label>
+                        <input type="text" class="form-control num money-input" id="wsTargetAmount" placeholder="500.000" inputmode="numeric" autocomplete="off">
+                    </div>
+                    <div class="form-group" style="margin-bottom:0">
+                        <label for="wsTargetPeople">👥 Số người</label>
+                        <input type="number" class="form-control num" id="wsTargetPeople" placeholder="0" min="0" inputmode="numeric">
+                    </div>
+                </div>
                 <label class="ws-public-toggle" style="margin-top:10px">
                     <input type="checkbox" id="wsPublic" checked>
                     <span>👁️ Cho người xem (chưa đăng nhập) thấy quỹ này</span>
+                </label>
+                <label class="ws-public-toggle" style="margin-top:8px">
+                    <input type="checkbox" id="wsShowFilter" checked>
+                    <span>🔍 Hiện thanh tìm kiếm & lọc giao dịch</span>
                 </label>
             </div>
         </div>
@@ -405,6 +459,54 @@
 <div class="image-viewer" id="imageViewer" role="dialog" aria-modal="true" aria-label="Xem ảnh">
     <button class="image-viewer-close" onclick="closeImageViewer()" aria-label="Đóng">✕</button>
     <img id="imageViewerImg" alt="Chi tiết ảnh" onclick="event.stopPropagation()">
+</div>
+
+<!-- BIG AMOUNT CONFIRM -->
+<div class="overlay" id="modalBigAmount" role="dialog" aria-modal="true" aria-labelledby="bigAmountTitle">
+    <div class="modal" style="max-width:420px">
+        <div class="confirm-body">
+            <div class="icon warn" aria-hidden="true">⚠️</div>
+            <h3 id="bigAmountTitle">Xác nhận số tiền lớn</h3>
+            <p>Bạn sắp nhập số tiền:</p>
+            <span class="big-amount-value num" id="bigAmountValue">0 đ</span>
+            <p>Vui lòng kiểm tra lại — có thể bị dư số 0?</p>
+        </div>
+        <div class="modal-foot">
+            <button class="btn btn-ghost" onclick="bigAmountResolve(false)">← Quay lại sửa</button>
+            <button class="btn btn-primary" onclick="bigAmountResolve(true)">✅ Đúng, lưu</button>
+        </div>
+    </div>
+</div>
+
+<!-- EDIT TARGET (admin, trip workspaces) -->
+<div class="overlay" id="modalEditTarget" role="dialog" aria-modal="true" aria-labelledby="editTargetTitle">
+    <div class="modal" style="max-width:420px">
+        <div class="modal-head">
+            <h3 id="editTargetTitle">🎯 Cập nhật mục tiêu quỹ</h3>
+            <button class="modal-x" onclick="closeModal('modalEditTarget')" aria-label="Đóng">✕</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="editTargetWsId">
+            <div class="form-group">
+                <label for="editTargetAmount">💵 Tiền/người (đ)</label>
+                <input type="text" class="form-control num money-input" id="editTargetAmount" placeholder="500.000" inputmode="numeric" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label for="editTargetPeople">👥 Số người</label>
+                <input type="number" class="form-control num" id="editTargetPeople" placeholder="0" min="0" inputmode="numeric">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+                <div style="padding:12px 14px;background:var(--brand-grad-soft);border-radius:var(--r-sm);font-size:13px;color:var(--text-2);display:flex;justify-content:space-between;align-items:center;gap:8px">
+                    <span>🎯 Tổng mục tiêu</span>
+                    <strong class="num" id="editTargetTotal" style="color:var(--brand-1);font-size:15px">0 đ</strong>
+                </div>
+            </div>
+        </div>
+        <div class="modal-foot">
+            <button class="btn btn-ghost" onclick="closeModal('modalEditTarget')">Hủy</button>
+            <button class="btn btn-primary" onclick="saveTarget()">💾 Lưu mục tiêu</button>
+        </div>
+    </div>
 </div>
 
 <!-- TOAST -->

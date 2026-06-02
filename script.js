@@ -17,6 +17,15 @@ var selectedImageFile = null;
 var removeImageFlag = false;
 var isSaving = false;   // chống double-submit khi mạng/máy lác
 
+/* ===== FILTER STATE ===== */
+var filterQuery = '';
+var filterFrom  = '';
+var filterTo    = '';
+
+/* ===== BIG AMOUNT CONFIRM ===== */
+var BIG_AMOUNT_THRESHOLD = 10000000;  // 10 triệu
+var bigAmountResolver = null;
+
 /* ===== WORKSPACE STATE ===== */
 var workspaces           = [];     // [{id,name,slug,icon,sort_order,is_public,...}]
 var currentWorkspace     = null;   // workspace object đang xem (null = đang ở selector)
@@ -95,6 +104,45 @@ function fmtDate(s) {
 function today() { return new Date().toISOString().split('T')[0]; }
 function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
+/* ===== MONEY INPUT FORMAT (1000000 → 1.000.000) ===== */
+function parseMoneyInput(str) {
+    if (str === null || str === undefined || str === '') return 0;
+    var digits = String(str).replace(/\D/g, '');
+    return digits ? parseInt(digits, 10) : 0;
+}
+function formatMoneyInputValue(v) {
+    var n = parseMoneyInput(v);
+    return n > 0 ? new Intl.NumberFormat('vi-VN').format(n) : '';
+}
+function attachMoneyFormat(el) {
+    if (!el || el.dataset.moneyAttached === '1') return;
+    el.dataset.moneyAttached = '1';
+    el.addEventListener('input', function () {
+        var oldVal = el.value;
+        var caret = el.selectionStart != null ? el.selectionStart : oldVal.length;
+        // Đếm số chữ số đứng trước con trỏ trong giá trị cũ
+        var digitsBeforeCaret = oldVal.slice(0, caret).replace(/\D/g, '').length;
+        var raw = oldVal.replace(/\D/g, '');
+        if (!raw) { el.value = ''; return; }
+        var formatted = new Intl.NumberFormat('vi-VN').format(parseInt(raw, 10));
+        el.value = formatted;
+        // Đặt lại con trỏ ở vị trí tương ứng (sau N chữ số như cũ)
+        var pos = 0, count = 0;
+        for (var i = 0; i < formatted.length; i++) {
+            if (count >= digitsBeforeCaret) break;
+            if (/\d/.test(formatted[i])) count++;
+            pos = i + 1;
+        }
+        try { el.setSelectionRange(pos, pos); } catch (_) {}
+    });
+    // Khi blur, đảm bảo định dạng cuối cùng
+    el.addEventListener('blur', function () {
+        el.value = formatMoneyInputValue(el.value);
+    });
+}
+// Gắn auto-format cho mọi input có class .money-input
+document.querySelectorAll('.money-input').forEach(attachMoneyFormat);
+
 function slugify(str) {
     var base = str.toLowerCase()
         .normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -130,6 +178,7 @@ async function loadWorkspaces() {
 function showSelector() {
     currentWorkspace = null;
     rows = [];
+    clearFilters();  // reset filter mỗi khi rời khỏi quỹ
     document.getElementById('workspaceSelectorScreen').style.display = 'block';
     document.getElementById('mainContent').style.display = 'none';
     document.title = 'Quỹ Anh Em';
@@ -139,11 +188,14 @@ function showSelector() {
 
 function selectWorkspace(ws) {
     currentWorkspace = ws;
+    clearFilters();  // mỗi quỹ bắt đầu với filter sạch
     document.getElementById('workspaceSelectorScreen').style.display = 'none';
     document.getElementById('mainContent').style.display = 'block';
     document.title = ws.name;
     applyWorkspaceLayout();
+    applyFilterVisibility();
     updateHeaderForState();
+    renderTargetCard();
     load();
 }
 
@@ -219,6 +271,10 @@ function openManageWs() {
     document.getElementById('wsName').value = '';
     document.getElementById('wsIcon').value = '';
     document.getElementById('wsPublic').checked = true;
+    document.getElementById('wsTargetAmount').value = '';
+    document.getElementById('wsTargetPeople').value = '';
+    document.getElementById('wsShowFilter').checked = true;
+    attachMoneyFormat(document.getElementById('wsTargetAmount'));
     var defaultRadio = document.querySelector('input[name="wsType"][value="cashflow"]');
     if (defaultRadio) defaultRadio.checked = true;
     document.getElementById('modalManage').classList.add('open');
@@ -232,23 +288,39 @@ function renderManageList() {
     }
     list.innerHTML = workspaces.map(function(ws) {
         var isPub = ws.is_public !== false; // default treat as public if cột chưa có
+        var isTripWs = (ws.type === 'trip');
         var visBtn = isPub
             ? '<button class="btn-icon vis on"  onclick="toggleWsVisibility(' + ws.id + ')" title="Đang công khai — bấm để ẩn">👁️</button>'
             : '<button class="btn-icon vis off" onclick="toggleWsVisibility(' + ws.id + ')" title="Đang ẩn — bấm để công khai">🔒</button>';
+        var fltOn = (ws.show_filter !== false); // mặc định bật nếu cột chưa có
+        var fltBtn = fltOn
+            ? '<button class="btn-icon flt on"  onclick="toggleWsFilter(' + ws.id + ')" title="Đang hiện thanh tìm kiếm — bấm để ẩn">🔍</button>'
+            : '<button class="btn-icon flt off" onclick="toggleWsFilter(' + ws.id + ')" title="Đang ẩn thanh tìm kiếm — bấm để hiện">🚫</button>';
         var badgeVis = isPub
             ? '<span class="ws-vis-badge public">Công khai</span>'
             : '<span class="ws-vis-badge private">Đã ẩn</span>';
-        var badgeType = (ws.type === 'trip')
+        var badgeType = isTripWs
             ? '<span class="ws-type-badge trip">✈️ Đóng quỹ</span>'
             : '<span class="ws-type-badge cashflow">📊 Sổ thu/chi</span>';
+        var targetBtn = isTripWs
+            ? '<button class="btn-icon target" onclick="openEditTarget(' + ws.id + ')" title="Sửa mục tiêu">🎯</button>'
+            : '';
+        var targetLine = '';
+        if (isTripWs && (ws.target_amount > 0 || ws.target_people > 0)) {
+            targetLine = '<div class="manage-item-target">🎯 <strong>' + moneyFull(ws.target_amount || 0) + '</strong>'
+                + (ws.target_people > 0 ? ' · 👥 ' + ws.target_people + ' người' : '') + '</div>';
+        } else if (isTripWs) {
+            targetLine = '<div class="manage-item-target">🎯 <em>Chưa đặt mục tiêu</em></div>';
+        }
         return '<div class="manage-item">' +
             '<div class="manage-item-info">' +
                 '<span class="manage-item-icon">' + (ws.icon || '💰') + '</span>' +
                 '<span class="manage-item-name">' + escHtml(ws.name) + '</span>' +
                 badgeType + badgeVis +
+                targetLine +
             '</div>' +
             '<div class="manage-item-actions">' +
-                visBtn +
+                targetBtn + fltBtn + visBtn +
                 '<button class="btn-icon del" onclick="confirmDeleteWorkspace(' + ws.id + ')" title="Xóa quỹ">🗑️</button>' +
             '</div>' +
         '</div>';
@@ -266,6 +338,19 @@ async function toggleWsVisibility(id) {
     renderManageList();
 }
 
+async function toggleWsFilter(id) {
+    var ws = workspaces.find(function(x){ return x.id === id; });
+    if (!ws) return;
+    var newVal = !(ws.show_filter !== false);
+    var { error } = await db.from('workspaces').update({ show_filter: newVal }).eq('id', id);
+    if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+    toast(newVal ? 'Đã hiện thanh tìm kiếm cho "' + ws.name + '"' : 'Đã ẩn thanh tìm kiếm của "' + ws.name + '"', 'success');
+    await loadWorkspacesPreserveCurrent();
+    renderManageList();
+    // Nếu đang xem chính quỹ này thì áp dụng ngay
+    if (currentWorkspace && currentWorkspace.id === id) applyFilterVisibility();
+}
+
 async function addWorkspace() {
     var name = document.getElementById('wsName').value.trim();
     var icon = document.getElementById('wsIcon').value.trim() || '💰';
@@ -275,19 +360,33 @@ async function addWorkspace() {
     if (!name) { toast('Vui lòng nhập tên quỹ!', 'error'); return; }
 
     var slug = slugify(name);
-    var { error } = await db.from('workspaces').insert({
+    var payload = {
         name: name,
         slug: slug,
         icon: icon,
         sort_order: workspaces.length,
         is_public: isPublic,
-        type: type
-    });
+        type: type,
+        show_filter: document.getElementById('wsShowFilter').checked
+    };
+    // Chỉ gửi target khi tạo quỹ kiểu trip — admin nhập tiền/người + số người,
+    // ta tự nhân ra tổng để lưu vào DB (UI ngoài vẫn hiển thị tổng).
+    if (type === 'trip') {
+        var perPerson = parseMoneyInput(document.getElementById('wsTargetAmount').value);
+        var people    = parseInt(document.getElementById('wsTargetPeople').value, 10) || 0;
+        payload.target_amount = perPerson * people;
+        payload.target_people = people;
+    }
+
+    var { error } = await db.from('workspaces').insert(payload);
     if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
 
     document.getElementById('wsName').value = '';
     document.getElementById('wsIcon').value = '';
+    document.getElementById('wsTargetAmount').value = '';
+    document.getElementById('wsTargetPeople').value = '';
     document.getElementById('wsPublic').checked = true;
+    document.getElementById('wsShowFilter').checked = true;
     var defaultRadio = document.querySelector('input[name="wsType"][value="cashflow"]');
     if (defaultRadio) defaultRadio.checked = true;
     toast('Đã thêm quỹ "' + name + '"!', 'success');
@@ -364,13 +463,19 @@ async function load() {
     rows = withBal.slice().reverse();
     render();
     stats();
+    renderTargetCard();
 }
 
 /* ===== RENDER ===== */
 function render() {
     var tbody = document.getElementById('tbody');
     if (!tbody) return;
-    document.getElementById('recCount').textContent = rows.length + ' giao dịch';
+    var display = getDisplayRows();
+    var filtered = isFilterActive();
+    var countEl = document.getElementById('recCount');
+    countEl.textContent = filtered
+        ? (display.length + '/' + rows.length + ' giao dịch')
+        : (rows.length + ' giao dịch');
 
     if (rows.length === 0) {
         tbody.innerHTML = '<tr><td colspan="7"><div class="state-box"><div class="icon">📭</div><h3>Chưa có giao dịch nào</h3><p>' +
@@ -378,9 +483,13 @@ function render() {
             '</p></div></td></tr>';
         return;
     }
+    if (display.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7"><div class="state-box"><div class="icon">🔍</div><h3>Không có kết quả phù hợp</h3><p>Thử thay đổi từ khoá hoặc khoảng ngày.</p></div></td></tr>';
+        return;
+    }
 
     var trip = isTrip(currentWorkspace);
-    tbody.innerHTML = rows.map(function(t, i) {
+    tbody.innerHTML = display.map(function(t, i) {
         var vao = t.tien_vao || 0;
         var ra  = t.tien_ra  || 0;
         var bal = t.tongConLai || 0;
@@ -405,6 +514,8 @@ function render() {
 }
 
 /* ===== STATS ===== */
+// LUÔN tính trên toàn bộ rows — filter chỉ ảnh hưởng bảng giao dịch,
+// stats (tổng vào, tổng ra, số dư) phản ánh trạng thái thật của quỹ.
 function stats() {
     var totalIn = 0, totalOut = 0;
     rows.forEach(function(t) { totalIn += t.tien_vao||0; totalOut += t.tien_ra||0; });
@@ -413,7 +524,7 @@ function stats() {
     document.getElementById('statOut').textContent = moneyFull(totalOut);
     var el = document.getElementById('statBal');
     el.textContent = moneyFull(bal);
-    el.className   = 'stat-value ' + (bal >= 0 ? 'blue' : 'danger');
+    el.className   = 'stat-value num ' + (bal >= 0 ? 'blue' : 'danger');
 }
 
 /* ===== OPEN QR ===== */
@@ -433,15 +544,15 @@ function fixYear(input) {
 function initMoneyFields() {
     var vao = document.getElementById('fVao');
     var ra  = document.getElementById('fRa');
-    vao.addEventListener('input', function() {
-        var v = parseFloat(this.value) || 0;
+    vao.addEventListener('input', function () {
+        var v = parseMoneyInput(this.value);
         ra.disabled      = v > 0;
         ra.style.opacity = v > 0 ? '0.35' : '1';
         ra.style.cursor  = v > 0 ? 'not-allowed' : '';
         if (v > 0) ra.value = '';
     });
-    ra.addEventListener('input', function() {
-        var v = parseFloat(this.value) || 0;
+    ra.addEventListener('input', function () {
+        var v = parseMoneyInput(this.value);
         vao.disabled      = v > 0;
         vao.style.opacity = v > 0 ? '0.35' : '1';
         vao.style.cursor  = v > 0 ? 'not-allowed' : '';
@@ -517,8 +628,8 @@ function openEdit(id) {
     document.getElementById('fId').value      = t.id;
     document.getElementById('fNgay').value    = t.ngay;
     resetMoneyFields();
-    document.getElementById('fVao').value     = t.tien_vao > 0 ? t.tien_vao : '';
-    document.getElementById('fRa').value      = t.tien_ra  > 0 ? t.tien_ra  : '';
+    document.getElementById('fVao').value     = t.tien_vao > 0 ? formatMoneyInputValue(t.tien_vao) : '';
+    document.getElementById('fRa').value      = t.tien_ra  > 0 ? formatMoneyInputValue(t.tien_ra)  : '';
     if (t.tien_vao > 0) { document.getElementById('fRa').disabled = true;  document.getElementById('fRa').style.opacity  = '0.35'; }
     if (t.tien_ra  > 0) { document.getElementById('fVao').disabled = true; document.getElementById('fVao').style.opacity = '0.35'; }
     document.getElementById('fNoidung').value = t.noi_dung || '';
@@ -571,7 +682,22 @@ async function save() {
     if (!ngay)      { toast('Vui lòng chọn ngày!', 'error'); return; }
     var year = parseInt(ngay.split('-')[0]);
     if (isNaN(year) || year < 2000 || year > 2099) { toast('Năm không hợp lệ! Chỉ nhập 4 chữ số (2000–2099).', 'error'); document.getElementById('fNgay').focus(); return; }
-    if (!vao && !ra){ toast('Vui lòng nhập tiền vào hoặc tiền ra!', 'error'); return; }
+
+    // Input giờ là text có dấu chấm — parse cho ra số nguyên thật sự
+    var tienVao = parseMoneyInput(vao);
+    var tienRa  = parseMoneyInput(ra);
+    if (tienVao === 0 && tienRa === 0) { toast('Vui lòng nhập tiền vào hoặc tiền ra!', 'error'); return; }
+
+    // Confirm khi số tiền lớn (> 10 triệu) — phòng dư số 0
+    var maxAmount = Math.max(tienVao, tienRa);
+    if (maxAmount > BIG_AMOUNT_THRESHOLD) {
+        var ok = await askBigAmount(maxAmount);
+        if (!ok) {
+            // User chọn "Quay lại sửa" → focus vào ô có số tiền lớn
+            (tienVao >= tienRa ? document.getElementById('fVao') : document.getElementById('fRa')).focus();
+            return;
+        }
+    }
 
     // Validation xong → khoá nút trước khi bắt đầu mọi async work
     isSaving = true;
@@ -580,8 +706,8 @@ async function save() {
     try {
         var payload = {
             ngay:     ngay,
-            tien_vao: vao ? parseFloat(vao) : 0,
-            tien_ra:  ra  ? parseFloat(ra)  : 0,
+            tien_vao: tienVao,
+            tien_ra:  tienRa,
             noi_dung: noidung || null,
             ghi_chu:  ghichu  || null,
             workspace_id: currentWorkspace.id
@@ -757,6 +883,172 @@ function copySTK() {
     navigator.clipboard.writeText('48210000777811').then(function() {
         toast('Đã copy số tài khoản!', 'success');
     });
+}
+
+/* ===== BIG AMOUNT CONFIRM ===== */
+function askBigAmount(amount) {
+    return new Promise(function (resolve) {
+        bigAmountResolver = resolve;
+        document.getElementById('bigAmountValue').textContent = moneyFull(amount);
+        document.getElementById('modalBigAmount').classList.add('open');
+    });
+}
+function bigAmountResolve(yes) {
+    document.getElementById('modalBigAmount').classList.remove('open');
+    var fn = bigAmountResolver;
+    bigAmountResolver = null;
+    if (fn) fn(!!yes);
+}
+
+/* ===== FILTER ===== */
+// filterFrom / filterTo định dạng "YYYY-MM" (input type=month).
+// t.ngay định dạng "YYYY-MM-DD" → lấy slice(0,7) để so sánh chuỗi (lexicographic = chronological).
+function getDisplayRows() {
+    var q = filterQuery.trim().toLowerCase();
+    var from = filterFrom || '';
+    var to   = filterTo   || '';
+    if (!q && !from && !to) return rows;
+    return rows.filter(function (t) {
+        if (from || to) {
+            var month = (t.ngay || '').slice(0, 7);
+            if (from && month < from) return false;
+            if (to   && month > to)   return false;
+        }
+        if (q) {
+            var hay = ((t.noi_dung || '') + ' ' + (t.ghi_chu || '')).toLowerCase();
+            if (hay.indexOf(q) === -1) return false;
+        }
+        return true;
+    });
+}
+function isFilterActive() {
+    return !!(filterQuery.trim() || filterFrom || filterTo);
+}
+function applyFilters() {
+    var btn = document.getElementById('fltClear');
+    if (btn) btn.hidden = !isFilterActive();
+    render();
+    stats();
+}
+function clearFilters() {
+    filterQuery = '';
+    filterFrom  = '';
+    filterTo    = '';
+    var q = document.getElementById('fltQuery');
+    var f = document.getElementById('fltFrom');
+    var t = document.getElementById('fltTo');
+    if (q) q.value = '';
+    if (f) f.value = '';
+    if (t) t.value = '';
+    applyFilters();
+}
+
+// Hiển thị/ẩn thanh filter theo cài đặt của workspace hiện tại.
+// Nếu workspace tắt filter → reset luôn các giá trị lọc để không còn "lọc ngầm".
+function applyFilterVisibility() {
+    var bar = document.getElementById('filterBar');
+    if (!bar) return;
+    var show = !currentWorkspace || (currentWorkspace.show_filter !== false);
+    bar.hidden = !show;
+    if (!show && isFilterActive()) clearFilters();
+}
+(function initFilters() {
+    var q = document.getElementById('fltQuery');
+    var f = document.getElementById('fltFrom');
+    var t = document.getElementById('fltTo');
+    var c = document.getElementById('fltClear');
+    if (!q || !f || !t || !c) return;
+    var debounce;
+    q.addEventListener('input', function () {
+        clearTimeout(debounce);
+        debounce = setTimeout(function () {
+            filterQuery = q.value;
+            applyFilters();
+        }, 180);
+    });
+    f.addEventListener('change', function () { filterFrom = f.value; applyFilters(); });
+    t.addEventListener('change', function () { filterTo   = t.value; applyFilters(); });
+    c.addEventListener('click', clearFilters);
+})();
+
+/* ===== TARGET CARD (trip workspace) ===== */
+function renderTargetCard() {
+    var card = document.getElementById('targetCard');
+    if (!card) return;
+    if (!isTrip(currentWorkspace)) { card.hidden = true; return; }
+    card.hidden = false;
+
+    var target  = (currentWorkspace && currentWorkspace.target_amount) || 0;
+    var people  = (currentWorkspace && currentWorkspace.target_people) || 0;
+
+    // Đã thu = tổng tiền vào của toàn bộ giao dịch (không phụ thuộc filter)
+    var collected = 0;
+    rows.forEach(function (t) { collected += (t.tien_vao || 0); });
+
+    document.getElementById('targetAmount').textContent = target > 0 ? moneyFull(target) : 'Chưa đặt';
+    document.getElementById('targetPeople').textContent = people > 0 ? (people + ' người') : '— người';
+    document.getElementById('targetCollected').textContent = moneyFull(collected);
+
+    var pct = target > 0 ? Math.min(999, Math.round(collected / target * 100)) : 0;
+    var pctText = target > 0 ? pct + '%' : '—';
+    var pctEl = document.getElementById('targetPercent');
+    var barEl = document.getElementById('targetBarFill');
+    pctEl.textContent = pctText;
+    pctEl.className = 'target-percent num' + (target > 0 && collected >= target ? (collected > target ? ' over' : ' full') : '');
+    barEl.style.width = Math.min(100, pct) + '%';
+    barEl.className = 'target-bar-fill' + (target > 0 && collected >= target ? (collected > target ? ' over' : ' full') : '');
+    var bar = barEl.parentElement;
+    if (bar) bar.setAttribute('aria-valuenow', String(Math.min(100, pct)));
+}
+
+/* ===== TARGET EDIT (admin only, trip workspaces) =====
+   Input: tiền/người + số người.  DB lưu: tổng (perPerson * people) + people.
+   Mở edit: chia ngược lại để hiện perPerson trong ô nhập. */
+function openEditTarget(wsId) {
+    var ws = workspaces.find(function (x) { return x.id === wsId; });
+    if (!ws) return;
+    if (ws.type !== 'trip') { toast('Chỉ quỹ du lịch (đóng quỹ) mới có mục tiêu', 'error'); return; }
+    document.getElementById('editTargetWsId').value = wsId;
+    var perPerson = (ws.target_people > 0) ? Math.round((ws.target_amount || 0) / ws.target_people) : 0;
+    document.getElementById('editTargetAmount').value = perPerson > 0 ? formatMoneyInputValue(perPerson) : '';
+    document.getElementById('editTargetPeople').value = ws.target_people || '';
+    attachMoneyFormat(document.getElementById('editTargetAmount'));
+    updateEditTargetTotal();
+    document.getElementById('modalEditTarget').classList.add('open');
+}
+
+// Tính & hiển thị "Tổng mục tiêu" live trong modal sửa
+function updateEditTargetTotal() {
+    var perPerson = parseMoneyInput(document.getElementById('editTargetAmount').value);
+    var people    = parseInt(document.getElementById('editTargetPeople').value, 10) || 0;
+    document.getElementById('editTargetTotal').textContent = moneyFull(perPerson * people);
+}
+// Wire live update
+(function initEditTargetPreview() {
+    ['editTargetAmount', 'editTargetPeople'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('input', updateEditTargetTotal);
+    });
+})();
+
+async function saveTarget() {
+    var wsId      = parseInt(document.getElementById('editTargetWsId').value, 10);
+    var perPerson = parseMoneyInput(document.getElementById('editTargetAmount').value);
+    var people    = parseInt(document.getElementById('editTargetPeople').value, 10) || 0;
+    if (!wsId) return;
+    if (perPerson < 0 || people < 0) { toast('Giá trị không hợp lệ!', 'error'); return; }
+
+    var amount = perPerson * people;
+    var { error } = await db.from('workspaces')
+        .update({ target_amount: amount, target_people: people })
+        .eq('id', wsId);
+    if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+
+    closeModal('modalEditTarget');
+    toast('Đã cập nhật mục tiêu!', 'success');
+    await loadWorkspacesPreserveCurrent();
+    renderManageList();
+    renderTargetCard();
 }
 
 /* ===== AUTO THEME — theo giờ Việt Nam (UTC+7) ===== */
