@@ -989,16 +989,19 @@ function renderTargetCard() {
     document.getElementById('targetPeople').textContent = people > 0 ? (people + ' người') : '— người';
     document.getElementById('targetCollected').textContent = moneyFull(collected);
 
-    var pct = target > 0 ? Math.min(999, Math.round(collected / target * 100)) : 0;
-    var pctText = target > 0 ? pct + '%' : '—';
+    // Phần trăm + thanh đều cap ở 100% khi đã đủ/vượt target — không hiển thị > 100%
+    var pctRaw  = target > 0 ? (collected / target * 100) : 0;
+    var pctView = Math.min(100, Math.round(pctRaw));
     var pctEl = document.getElementById('targetPercent');
     var barEl = document.getElementById('targetBarFill');
-    pctEl.textContent = pctText;
-    pctEl.className = 'target-percent num' + (target > 0 && collected >= target ? (collected > target ? ' over' : ' full') : '');
-    barEl.style.width = Math.min(100, pct) + '%';
-    barEl.className = 'target-bar-fill' + (target > 0 && collected >= target ? (collected > target ? ' over' : ' full') : '');
+    pctEl.textContent = target > 0 ? (pctView + '%') : '—';
+    // Đủ target trở lên = full (xanh lá). Không còn trạng thái "over" vì visual đã cap.
+    var done = target > 0 && collected >= target;
+    pctEl.className = 'target-percent num' + (done ? ' full' : '');
+    barEl.style.width = pctView + '%';
+    barEl.className = 'target-bar-fill' + (done ? ' full' : '');
     var bar = barEl.parentElement;
-    if (bar) bar.setAttribute('aria-valuenow', String(Math.min(100, pct)));
+    if (bar) bar.setAttribute('aria-valuenow', String(pctView));
 }
 
 /* ===== TARGET EDIT (admin only, trip workspaces) =====
