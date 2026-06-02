@@ -1,50 +1,86 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="vi" data-theme="light">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#6366f1">
+    <meta name="description" content="Quỹ Anh Em — Quản lý quỹ chung minh bạch, nhanh, gọn.">
     <title>Quỹ 500 Anh Em</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="style.css">
     <script src="config.js"></script>
+    <script>
+        // Auto theme theo giờ Việt Nam (UTC+7): 6:00–17:59 = sáng, 18:00–5:59 = tối.
+        // Chạy trước paint để không nhấp nháy theme khi load.
+        (function () {
+            try {
+                var h = parseInt(new Intl.DateTimeFormat('en-US', {
+                    hour: 'numeric', hour12: false, timeZone: 'Asia/Ho_Chi_Minh'
+                }).format(new Date()), 10);
+                document.documentElement.setAttribute('data-theme', (h >= 6 && h < 18) ? 'light' : 'dark');
+            } catch (_) {
+                document.documentElement.setAttribute('data-theme', 'light');
+            }
+        })();
+    </script>
 </head>
 <body>
 
 <!-- HEADER -->
-<header class="header">
+<header class="header" role="banner">
     <div class="header-inner">
         <div class="brand">
-            <div class="brand-logo" id="brandLogo">💰</div>
+            <div class="brand-logo" id="brandLogo" aria-hidden="true">💰</div>
             <div>
                 <h1 id="brandTitle">Quỹ Anh Em</h1>
             </div>
         </div>
-        <div style="display:flex;gap:10px;align-items:center;flex-shrink:0">
-            <button id="btnSwitchWs" class="btn-switch-ws" onclick="backToSelector()" title="Đổi quỹ" style="display:none">
-                <span style="font-size:16px;line-height:1">⇄</span>
+
+        <div class="header-actions">
+            <button id="btnSwitchWs" class="btn-switch-ws" onclick="backToSelector()" title="Đổi quỹ" aria-label="Đổi quỹ" hidden>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+                    <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+                </svg>
                 <span class="lbl">Đổi quỹ</span>
             </button>
-            <button id="btnQr" class="btn-qr" onclick="openQR()" style="display:none">
-                <span>📲</span>
+
+            <button id="btnQr" class="btn-qr" onclick="openQR()" aria-label="Chuyển tiền" hidden>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                    <rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3"/><path d="M21 14v.01"/><path d="M14 21v-3"/><path d="M17 21h.01"/><path d="M21 21v-3"/><path d="M21 17h-3"/>
+                </svg>
                 <span class="lbl">Chuyển tiền</span>
             </button>
-            <div id="adminControls" style="display:none;gap:10px;align-items:center">
-                <button id="btnManageWs" class="btn-manage-ws" onclick="openManageWs()" title="Quản lý quỹ">
-                    <span style="font-size:14px;line-height:1">⚙️</span>
+
+            <div id="adminControls" class="admin-group" role="group" aria-label="Bảng điều khiển quản trị">
+                <button id="btnManageWs" class="btn-manage-ws" onclick="openManageWs()" title="Quản lý quỹ" aria-label="Quản lý quỹ">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    </svg>
                     <span class="lbl">Quản lý quỹ</span>
                 </button>
-                <button id="btnAddTx" class="btn-add" onclick="openAdd()" style="display:none">
-                    <span style="font-size:18px;line-height:1">+</span>
+                <button id="btnAddTx" class="btn-add" onclick="openAdd()" aria-label="Thêm giao dịch" hidden>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
                     <span class="lbl">Thêm giao dịch</span>
                 </button>
-                <button class="btn-logout" onclick="doLogout()" title="Đăng xuất">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <button class="btn-logout" onclick="doLogout()" title="Đăng xuất" aria-label="Đăng xuất">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
                     </svg>
                 </button>
             </div>
-            <button id="btnLogin" class="btn-login-subtle" onclick="openLogin()" title="Đăng nhập thủ quỹ">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+
+            <button id="btnLogin" class="btn-login-subtle" onclick="openLogin()" title="Đăng nhập thủ quỹ" aria-label="Đăng nhập thủ quỹ">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                 </svg>
             </button>
@@ -53,18 +89,22 @@
 </header>
 
 <!-- QR MODAL -->
-<div class="overlay" id="modalQR">
-    <div class="modal" style="max-width:340px">
+<div class="overlay" id="modalQR" role="dialog" aria-modal="true" aria-labelledby="qrTitle">
+    <div class="modal" style="max-width:360px">
         <div class="modal-head">
-            <h3>📲 Chuyển tiền vào quỹ</h3>
-            <button class="modal-x" onclick="closeModal('modalQR')">✕</button>
+            <h3 id="qrTitle">📲 Chuyển tiền vào quỹ</h3>
+            <button class="modal-x" onclick="closeModal('modalQR')" aria-label="Đóng">✕</button>
         </div>
         <div class="qr-modal-body">
             <img src="qr.jpg" alt="QR BIDV" onclick="openImageViewer(this.src)" title="Chạm để phóng to">
-            <div class="qr-bank-name">🏦 Ngân hàng BIDV</div>
+            <div class="qr-bank-name">Ngân hàng BIDV</div>
             <div class="qr-account">
-                48210000777811
-                <button class="btn-copy-stk" onclick="copySTK()" title="Copy STK">📋</button>
+                <span>48210000777811</span>
+                <button class="btn-copy-stk" onclick="copySTK()" title="Copy số tài khoản" aria-label="Copy số tài khoản">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                    </svg>
+                </button>
             </div>
             <div class="qr-name">PHIHONGSON</div>
             <div class="qr-hint">📱 Mở app ngân hàng → Quét mã → Chuyển tiền</div>
@@ -73,53 +113,59 @@
 </div>
 
 <!-- WORKSPACE SELECTOR SCREEN -->
-<section id="workspaceSelectorScreen" class="workspace-selector" style="display:none">
+<section id="workspaceSelectorScreen" class="workspace-selector" hidden>
     <div class="ws-header">
-        <div class="ws-icon-big">💰</div>
+        <div class="ws-icon-big" aria-hidden="true">💰</div>
         <h2>Chọn quỹ</h2>
-        <p class="ws-subtitle">Chọn 1 quỹ để xem giao dịch</p>
+        <p class="ws-subtitle">Chọn một quỹ để xem giao dịch</p>
     </div>
     <div class="ws-grid" id="workspaceGrid"></div>
 </section>
 
-<main class="main" id="mainContent" style="display:none">
+<main class="main" id="mainContent" hidden>
 
     <!-- Config warning nếu chưa cài key -->
     <div class="config-banner" id="configBanner" style="display:none">
         <span class="cb-icon">⚠️</span>
         <div>
             <h4>Chưa cấu hình Supabase!</h4>
-            <p>Mở file <code>index.html</code>, tìm dòng <code>SUPABASE_URL</code> và <code>SUPABASE_ANON_KEY</code> rồi điền thông tin từ project Supabase của bạn vào.</p>
+            <p>Mở file <code>config.js</code>, điền <code>SUPABASE_URL</code> và <code>SUPABASE_ANON_KEY</code> từ project Supabase của bạn.</p>
         </div>
     </div>
 
     <!-- Stats -->
-    <div class="stats">
+    <section class="stats" aria-label="Tổng quan tài chính">
         <div class="stat-card green">
-            <div class="stat-icon green">📈</div>
+            <div class="stat-icon green" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+            </div>
             <div>
                 <div class="stat-label">Tổng tiền vào</div>
-                <div class="stat-value green" id="statIn">—</div>
+                <div class="stat-value green num" id="statIn">—</div>
             </div>
         </div>
         <div class="stat-card red">
-            <div class="stat-icon red">📉</div>
+            <div class="stat-icon red" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>
+            </div>
             <div>
                 <div class="stat-label">Tổng tiền ra</div>
-                <div class="stat-value red" id="statOut">—</div>
+                <div class="stat-value red num" id="statOut">—</div>
             </div>
         </div>
         <div class="stat-card blue">
-            <div class="stat-icon blue">💵</div>
+            <div class="stat-icon blue" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.4"/><path d="M6 12h.01"/><path d="M18 12h.01"/></svg>
+            </div>
             <div>
                 <div class="stat-label">Số dư hiện tại</div>
-                <div class="stat-value blue" id="statBal">—</div>
+                <div class="stat-value blue num" id="statBal">—</div>
             </div>
         </div>
-    </div>
+    </section>
 
     <!-- Table -->
-    <div class="table-card">
+    <section class="table-card" aria-label="Lịch sử giao dịch">
         <div class="table-head">
             <h2>📋 Lịch sử giao dịch</h2>
             <span class="badge" id="recCount">0 giao dịch</span>
@@ -130,80 +176,81 @@
                     <tr>
                         <th style="width:48px">#</th>
                         <th style="width:130px">Ngày</th>
-                        <th style="width:160px">Tiền Vào</th>
-                        <th style="width:160px">Tiền Ra</th>
-                        <th>Nội Dung</th>
-                        <th id="colHead6" style="width:170px">Tổng Còn Lại</th>
-                        <th style="width:100px">Thao Tác</th>
+                        <th style="width:160px">Tiền vào</th>
+                        <th style="width:160px">Tiền ra</th>
+                        <th>Nội dung</th>
+                        <th id="colHead6" style="width:170px">Tổng còn lại</th>
+                        <th style="width:110px">Thao tác</th>
                     </tr>
                 </thead>
                 <tbody id="tbody">
-                    <tr><td colspan="7">
-                        <div class="state-box">
-                            <div class="spinner"></div>
-                            Đang tải dữ liệu...
+                    <tr class="sk-row"><td colspan="7">
+                        <div style="display:grid;gap:14px">
+                            <div class="sk-bar w-60"></div>
+                            <div class="sk-bar w-40"></div>
+                            <div class="sk-bar w-60"></div>
+                            <div class="sk-bar"></div>
                         </div>
                     </td></tr>
                 </tbody>
             </table>
         </div>
-    </div>
+    </section>
 </main>
 
 <!-- FORM MODAL -->
-<div class="overlay" id="modalForm">
-    <div class="modal" style="max-width:490px">
+<div class="overlay" id="modalForm" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal" style="max-width:520px">
         <div class="modal-head">
             <h3 id="modalTitle">➕ Thêm giao dịch</h3>
-            <button class="modal-x" onclick="closeModal('modalForm')">✕</button>
+            <button class="modal-x" onclick="closeModal('modalForm')" aria-label="Đóng">✕</button>
         </div>
         <div class="modal-body">
             <input type="hidden" id="fId">
             <div class="form-group">
-                <label>Ngày <span class="req">*</span></label>
-                <input type="date" class="form-control" id="fNgay" min="2000-01-01" max="2099-12-31"
-                    oninput="fixYear(this)">
+                <label for="fNgay">Ngày <span class="req">*</span></label>
+                <input type="date" class="form-control" id="fNgay" min="2000-01-01" max="2099-12-31" oninput="fixYear(this)">
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label>Tiền vào (đ)</label>
-                    <input type="number" class="form-control" id="fVao" placeholder="0" min="0" step="1000">
+                    <label for="fVao">Tiền vào (đ)</label>
+                    <input type="number" class="form-control num" id="fVao" placeholder="0" min="0" step="1000" inputmode="numeric">
                 </div>
                 <div class="form-group">
-                    <label>Tiền ra (đ)</label>
-                    <input type="number" class="form-control" id="fRa" placeholder="0" min="0" step="1000">
+                    <label for="fRa">Tiền ra (đ)</label>
+                    <input type="number" class="form-control num" id="fRa" placeholder="0" min="0" step="1000" inputmode="numeric">
                 </div>
             </div>
             <div class="form-group" style="margin-bottom:0">
-                <label>Nội dung</label>
+                <label for="fNoidung">Nội dung</label>
                 <textarea class="form-control" id="fNoidung" placeholder="Mô tả giao dịch..."></textarea>
             </div>
-            <div class="form-group" id="fGhiChuGroup" style="margin-bottom:0; display:none">
-                <label>📌 Ghi chú</label>
+            <div class="form-group" id="fGhiChuGroup" style="margin-bottom:0" hidden>
+                <label for="fGhiChu">📌 Ghi chú</label>
                 <textarea class="form-control" id="fGhiChu" placeholder="VD: Đã đóng đủ / Còn thiếu 500k..." style="min-height:60px"></textarea>
             </div>
             <div class="form-group" style="margin-bottom:0">
-                <label>Ảnh (tùy chọn)</label>
-                <input type="file" class="form-control" id="fAnh" accept="image/*" style="padding: 8px 13px; cursor: pointer;">
-                <div id="previewAnh" style="margin-top: 10px; display: none;">
-                    <img id="previewImg" style="max-width: 100%; max-height: 200px; border-radius: 10px; border: 2px solid var(--border);">
-                    <button type="button" class="btn btn-ghost" id="removeImageBtn" style="margin-top: 10px; display: none;">🗑️ Xóa ảnh</button>
+                <label for="fAnh">Ảnh (tùy chọn)</label>
+                <input type="file" class="form-control" id="fAnh" accept="image/*">
+                <div id="previewAnh" class="preview-box">
+                    <img id="previewImg" alt="Xem trước ảnh">
+                    <button type="button" class="btn btn-ghost" id="removeImageBtn" style="margin-top:10px;display:none">🗑️ Xóa ảnh</button>
                 </div>
             </div>
         </div>
         <div class="modal-foot">
             <button class="btn btn-ghost" onclick="closeModal('modalForm')">Hủy</button>
-            <button class="btn btn-primary" onclick="save()">💾 Lưu</button>
+            <button class="btn btn-primary" id="btnSave" onclick="save()">💾 Lưu</button>
         </div>
     </div>
 </div>
 
 <!-- DELETE MODAL -->
-<div class="overlay" id="modalDel">
-    <div class="modal" style="max-width:380px">
+<div class="overlay" id="modalDel" role="dialog" aria-modal="true" aria-labelledby="delTxTitle">
+    <div class="modal" style="max-width:400px">
         <div class="confirm-body">
-            <div class="icon">🗑️</div>
-            <h3>Xóa giao dịch?</h3>
+            <div class="icon" aria-hidden="true">🗑️</div>
+            <h3 id="delTxTitle">Xóa giao dịch?</h3>
             <p>Hành động này không thể hoàn tác.<br>Bạn có chắc chắn muốn xóa?</p>
         </div>
         <div class="modal-foot">
@@ -214,71 +261,58 @@
 </div>
 
 <!-- DETAIL MODAL -->
-<div class="overlay" id="modalDetail">
-    <div class="modal" style="max-width:520px">
+<div class="overlay" id="modalDetail" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+    <div class="modal" style="max-width:540px">
         <div class="modal-head">
-            <h3>📋 Chi tiết giao dịch</h3>
-            <button class="modal-x" onclick="closeModal('modalDetail')">✕</button>
+            <h3 id="detailTitle">📋 Chi tiết giao dịch</h3>
+            <button class="modal-x" onclick="closeModal('modalDetail')" aria-label="Đóng">✕</button>
         </div>
-        <div class="modal-body" style="padding: 24px;">
-            <div style="display: grid; gap: 20px;">
-                <!-- Ảnh -->
-                <div id="detailImageBox" style="display: none;">
-                    <div style="font-size: 12px; font-weight: 700; color: #4a5568; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px;">📷 Ảnh</div>
-                    <img id="detailImage" style="width: 100%; border-radius: 12px; border: 2px solid var(--border); max-height: 300px; object-fit: cover;">
+        <div class="modal-body">
+            <div class="detail-grid">
+                <div class="detail-field" id="detailImageBox" style="display:none">
+                    <span class="detail-label">📷 Ảnh</span>
+                    <img id="detailImage" class="detail-image" alt="Ảnh giao dịch">
                 </div>
-                
-                <!-- Ngày -->
-                <div>
-                    <div style="font-size: 12px; font-weight: 700; color: #4a5568; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px;">📅 Ngày</div>
-                    <div style="font-size: 15px; color: #2d3748;" id="detailNgay">—</div>
+                <div class="detail-field">
+                    <span class="detail-label">📅 Ngày</span>
+                    <span class="detail-value num" id="detailNgay">—</span>
                 </div>
-                
-                <!-- Tiền vào -->
-                <div>
-                    <div style="font-size: 12px; font-weight: 700; color: #4a5568; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px;">💰 Tiền Vào</div>
-                    <div style="font-size: 15px; font-weight: 700; color: #00a040;" id="detailVao">—</div>
+                <div class="detail-field">
+                    <span class="detail-label">💰 Tiền vào</span>
+                    <span class="detail-value in num" id="detailVao">—</span>
                 </div>
-                
-                <!-- Tiền ra -->
-                <div>
-                    <div style="font-size: 12px; font-weight: 700; color: #4a5568; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px;">💸 Tiền Ra</div>
-                    <div style="font-size: 15px; font-weight: 700; color: #e53935;" id="detailRa">—</div>
+                <div class="detail-field">
+                    <span class="detail-label">💸 Tiền ra</span>
+                    <span class="detail-value out num" id="detailRa">—</span>
                 </div>
-                
-                <!-- Nội dung -->
-                <div>
-                    <div style="font-size: 12px; font-weight: 700; color: #4a5568; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px;">📝 Nội Dung</div>
-                    <div style="font-size: 14px; color: #4a5568; line-height: 1.6; word-wrap: break-word;" id="detailNoidung">—</div>
+                <div class="detail-field">
+                    <span class="detail-label">📝 Nội dung</span>
+                    <span class="detail-value" id="detailNoidung">—</span>
                 </div>
-
-                <!-- Ghi chú (chỉ workspace type=trip) -->
-                <div id="detailGhiChuBox" style="display:none">
-                    <div style="font-size: 12px; font-weight: 700; color: #4a5568; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px;">📌 Ghi Chú</div>
-                    <div style="font-size: 14px; color: #4a5568; line-height: 1.6; word-wrap: break-word;" id="detailGhiChu">—</div>
+                <div class="detail-field" id="detailGhiChuBox" style="display:none">
+                    <span class="detail-label">📌 Ghi chú</span>
+                    <span class="detail-value" id="detailGhiChu">—</span>
                 </div>
-
-                <!-- Số dư (chỉ workspace type=cashflow) -->
-                <div id="detailBalBox">
-                    <div style="font-size: 12px; font-weight: 700; color: #4a5568; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px;">💵 Số Dư Còn Lại</div>
-                    <div style="font-size: 15px; font-weight: 700;" id="detailBal">—</div>
+                <div class="detail-field" id="detailBalBox">
+                    <span class="detail-label">💵 Số dư còn lại</span>
+                    <span class="detail-value num" id="detailBal">—</span>
                 </div>
             </div>
         </div>
-        <div class="modal-foot" id="detailFooter" style="display: none;">
+        <div class="modal-foot" id="detailFooter" style="display:none">
             <button class="btn btn-ghost" onclick="closeModal('modalDetail')">Đóng</button>
-            <button class="btn btn-primary" onclick="editFromDetail()" title="Sửa">✏️ Sửa</button>
-            <button class="btn btn-red" onclick="deleteFromDetail()" title="Xóa">🗑️ Xóa</button>
+            <button class="btn btn-primary" onclick="editFromDetail()">✏️ Sửa</button>
+            <button class="btn btn-red" onclick="deleteFromDetail()">🗑️ Xóa</button>
         </div>
     </div>
 </div>
 
-<!-- MANAGE WORKSPACES MODAL (admin only) -->
-<div class="overlay" id="modalManage">
-    <div class="modal" style="max-width:480px">
+<!-- MANAGE WORKSPACES MODAL -->
+<div class="overlay" id="modalManage" role="dialog" aria-modal="true" aria-labelledby="manageTitle">
+    <div class="modal" style="max-width:520px">
         <div class="modal-head">
-            <h3>⚙️ Quản lý quỹ</h3>
-            <button class="modal-x" onclick="closeModal('modalManage')">✕</button>
+            <h3 id="manageTitle">⚙️ Quản lý quỹ</h3>
+            <button class="modal-x" onclick="closeModal('modalManage')" aria-label="Đóng">✕</button>
         </div>
         <div class="modal-body">
             <div class="manage-section">
@@ -289,13 +323,12 @@
                 <h4>➕ Thêm quỹ mới</h4>
                 <div class="ws-form-row">
                     <div class="form-group" style="margin-bottom:0">
-                        <label>Icon</label>
+                        <label for="wsIcon">Icon</label>
                         <input type="text" class="form-control" id="wsIcon" placeholder="💰" maxlength="4" style="text-align:center;font-size:18px">
                     </div>
                     <div class="form-group" style="margin-bottom:0">
-                        <label>Tên quỹ <span class="req">*</span></label>
-                        <input type="text" class="form-control" id="wsName" placeholder="VD: Quỹ Du Lịch"
-                            onkeydown="if(event.key==='Enter') addWorkspace()">
+                        <label for="wsName">Tên quỹ <span class="req">*</span></label>
+                        <input type="text" class="form-control" id="wsName" placeholder="VD: Quỹ Du Lịch" onkeydown="if(event.key==='Enter') addWorkspace()">
                     </div>
                 </div>
                 <div class="ws-type-row" style="margin-top:12px">
@@ -330,12 +363,12 @@
 </div>
 
 <!-- DELETE WORKSPACE CONFIRM -->
-<div class="overlay" id="modalDelWs">
-    <div class="modal" style="max-width:400px">
+<div class="overlay" id="modalDelWs" role="dialog" aria-modal="true" aria-labelledby="delWsTitle">
+    <div class="modal" style="max-width:420px">
         <div class="confirm-body">
-            <div class="icon">⚠️</div>
-            <h3>Xóa quỹ <span id="delWsName" style="color:var(--danger)"></span>?</h3>
-            <p>Toàn bộ giao dịch của quỹ này sẽ bị xóa theo và <strong>không thể khôi phục</strong>.<br>Bạn có chắc chắn muốn xóa?</p>
+            <div class="icon" aria-hidden="true">⚠️</div>
+            <h3 id="delWsTitle">Xóa quỹ <span id="delWsName" style="color:var(--danger)"></span>?</h3>
+            <p>Toàn bộ giao dịch của quỹ này sẽ bị xóa theo và <strong>không thể khôi phục</strong>.</p>
         </div>
         <div class="modal-foot">
             <button class="btn btn-ghost" onclick="closeModal('modalDelWs')">Hủy</button>
@@ -345,21 +378,20 @@
 </div>
 
 <!-- LOGIN MODAL -->
-<div class="overlay" id="modalLogin">
-    <div class="modal" style="max-width:380px">
+<div class="overlay" id="modalLogin" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+    <div class="modal" style="max-width:400px">
         <div class="modal-head">
-            <h3>🔒 Đăng nhập thủ quỹ</h3>
-            <button class="modal-x" onclick="closeModal('modalLogin')">✕</button>
+            <h3 id="loginTitle">🔒 Đăng nhập thủ quỹ</h3>
+            <button class="modal-x" onclick="closeModal('modalLogin')" aria-label="Đóng">✕</button>
         </div>
         <div class="modal-body">
             <div class="form-group">
-                <label>Email <span class="req">*</span></label>
-                <input type="email" class="form-control" id="lEmail" placeholder="abc@gmail.com">
+                <label for="lEmail">Email <span class="req">*</span></label>
+                <input type="email" class="form-control" id="lEmail" placeholder="abc@gmail.com" autocomplete="username">
             </div>
             <div class="form-group" style="margin-bottom:0">
-                <label>Mật khẩu <span class="req">*</span></label>
-                <input type="password" class="form-control" id="lPass" placeholder=""
-                    onkeydown="if(event.key==='Enter') doLogin()">
+                <label for="lPass">Mật khẩu <span class="req">*</span></label>
+                <input type="password" class="form-control" id="lPass" autocomplete="current-password" onkeydown="if(event.key==='Enter') doLogin()">
             </div>
         </div>
         <div class="modal-foot">
@@ -369,14 +401,14 @@
     </div>
 </div>
 
-<!-- IMAGE VIEWER MODAL -->
-<div class="image-viewer" id="imageViewer">
-    <button class="image-viewer-close" onclick="closeImageViewer()">✕</button>
+<!-- IMAGE VIEWER -->
+<div class="image-viewer" id="imageViewer" role="dialog" aria-modal="true" aria-label="Xem ảnh">
+    <button class="image-viewer-close" onclick="closeImageViewer()" aria-label="Đóng">✕</button>
     <img id="imageViewerImg" alt="Chi tiết ảnh" onclick="event.stopPropagation()">
 </div>
 
 <!-- TOAST -->
-<div class="toast-wrap" id="toastWrap"></div>
+<div class="toast-wrap" id="toastWrap" role="status" aria-live="polite"></div>
 
 <script src="script.js"></script>
 </body>

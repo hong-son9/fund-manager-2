@@ -15,6 +15,7 @@ var isAdmin = false;
 var currentDetailId = null;
 var selectedImageFile = null;
 var removeImageFlag = false;
+var isSaving = false;   // chống double-submit khi mạng/máy lác
 
 /* ===== WORKSPACE STATE ===== */
 var workspaces           = [];     // [{id,name,slug,icon,sort_order,is_public,...}]
@@ -28,15 +29,8 @@ function setAdminUI(loggedIn) {
     isAdmin = loggedIn;
     document.getElementById('adminControls').style.display = loggedIn ? 'flex' : 'none';
     document.getElementById('btnLogin').style.display      = loggedIn ? 'none' : 'flex';
-    var btnQr = document.getElementById('btnQr');
-    var qrLbl = btnQr.querySelector('.lbl');
-    if (loggedIn) {
-        btnQr.classList.add('icon-only');
-        qrLbl.style.display = 'none';
-    } else {
-        btnQr.classList.remove('icon-only');
-        qrLbl.style.display = '';
-    }
+    // Nút QR chỉ dành cho người xem (góp tiền vào quỹ). Admin không cần.
+    // Việc ẩn/hiện cụ thể do updateHeaderForState() xử lý theo state (in-workspace + !admin).
     document.querySelector('table').classList.toggle('admin-mode', loggedIn);
     updateHeaderForState();
     // Re-render selector cards to refresh empty-state hint nếu đang ở selector
@@ -189,7 +183,8 @@ function updateHeaderForState() {
     }
 
     // Buttons (state-dependent)
-    document.getElementById('btnQr').style.display       = inWs ? 'flex' : 'none';
+    // QR (góp tiền) chỉ hiện cho người xem, không hiện cho admin
+    document.getElementById('btnQr').style.display       = (inWs && !isAdmin) ? 'flex' : 'none';
     document.getElementById('btnSwitchWs').style.display = (inWs && hasMulti) ? 'flex' : 'none';
 
     // Admin-only buttons (chỉ khi đã login)
@@ -543,7 +538,28 @@ function openEdit(id) {
 }
 
 /* ===== SAVE ===== */
+function setSaveBusy(busy) {
+    var btn = document.getElementById('btnSave');
+    if (!btn) return;
+    if (busy) {
+        if (!btn.dataset.original) btn.dataset.original = btn.innerHTML;
+        btn.disabled = true;
+        btn.setAttribute('aria-busy', 'true');
+        btn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span> Đang lưu...';
+    } else {
+        btn.disabled = false;
+        btn.removeAttribute('aria-busy');
+        if (btn.dataset.original) {
+            btn.innerHTML = btn.dataset.original;
+            delete btn.dataset.original;
+        }
+    }
+}
+
 async function save() {
+    // Guard chống double-submit: chặn ngay cả khi click 2-3 lần liên tiếp
+    if (isSaving) return;
+
     if (!currentWorkspace) { toast('Không xác định được quỹ!', 'error'); return; }
     var id      = document.getElementById('fId').value;
     var ngay    = document.getElementById('fNgay').value;
@@ -557,70 +573,80 @@ async function save() {
     if (isNaN(year) || year < 2000 || year > 2099) { toast('Năm không hợp lệ! Chỉ nhập 4 chữ số (2000–2099).', 'error'); document.getElementById('fNgay').focus(); return; }
     if (!vao && !ra){ toast('Vui lòng nhập tiền vào hoặc tiền ra!', 'error'); return; }
 
-    var payload = {
-        ngay:     ngay,
-        tien_vao: vao ? parseFloat(vao) : 0,
-        tien_ra:  ra  ? parseFloat(ra)  : 0,
-        noi_dung: noidung || null,
-        ghi_chu:  ghichu  || null,
-        workspace_id: currentWorkspace.id
-    };
+    // Validation xong → khoá nút trước khi bắt đầu mọi async work
+    isSaving = true;
+    setSaveBusy(true);
 
-    // Handle image upload
-    if (selectedImageFile) {
-        try {
-            var fileName = 'transaction_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-            var upsert = !id;
+    try {
+        var payload = {
+            ngay:     ngay,
+            tien_vao: vao ? parseFloat(vao) : 0,
+            tien_ra:  ra  ? parseFloat(ra)  : 0,
+            noi_dung: noidung || null,
+            ghi_chu:  ghichu  || null,
+            workspace_id: currentWorkspace.id
+        };
 
-            var uploadRes = await db.storage
-                .from('transaction-images')
-                .upload(fileName, selectedImageFile, { upsert: upsert });
+        // Handle image upload
+        if (selectedImageFile) {
+            try {
+                var fileName = 'transaction_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                var upsert = !id;
 
-            if (uploadRes.error) {
-                console.error('Upload error:', uploadRes.error);
-                toast('Lỗi upload ảnh: ' + uploadRes.error.message, 'error');
+                var uploadRes = await db.storage
+                    .from('transaction-images')
+                    .upload(fileName, selectedImageFile, { upsert: upsert });
+
+                if (uploadRes.error) {
+                    console.error('Upload error:', uploadRes.error);
+                    toast('Lỗi upload ảnh: ' + uploadRes.error.message, 'error');
+                    return;
+                }
+
+                var urlRes = db.storage
+                    .from('transaction-images')
+                    .getPublicUrl(fileName);
+
+                if (urlRes && urlRes.data) {
+                    payload.anh_url = urlRes.data.publicUrl;
+                }
+            } catch (err) {
+                console.error('Upload exception:', err);
+                toast('Lỗi: ' + err.message, 'error');
                 return;
             }
+        } else if (removeImageFlag) {
+            payload.anh_url = null;
+        }
 
-            var urlRes = db.storage
-                .from('transaction-images')
-                .getPublicUrl(fileName);
-
-            if (urlRes && urlRes.data) {
-                payload.anh_url = urlRes.data.publicUrl;
+        var error;
+        try {
+            if (id) {
+                // Khi update, KHÔNG đổi workspace_id (giữ nguyên), tránh việc move giao dịch sang quỹ khác bằng nhầm
+                var updatePayload = Object.assign({}, payload);
+                delete updatePayload.workspace_id;
+                var resU = await db.from('transactions').update(updatePayload).eq('id', id);
+                error = resU.error;
+            } else {
+                var resI = await db.from('transactions').insert(payload);
+                error = resI.error;
             }
         } catch (err) {
-            console.error('Upload exception:', err);
+            console.error('Database error:', err);
             toast('Lỗi: ' + err.message, 'error');
             return;
         }
-    } else if (removeImageFlag) {
-        payload.anh_url = null;
-    }
 
-    var error;
-    try {
-        if (id) {
-            // Khi update, KHÔNG đổi workspace_id (giữ nguyên), tránh việc move giao dịch sang quỹ khác bằng nhầm
-            var updatePayload = Object.assign({}, payload);
-            delete updatePayload.workspace_id;
-            var resU = await db.from('transactions').update(updatePayload).eq('id', id);
-            error = resU.error;
-        } else {
-            var resI = await db.from('transactions').insert(payload);
-            error = resI.error;
-        }
-    } catch (err) {
-        console.error('Database error:', err);
-        toast('Lỗi: ' + err.message, 'error');
-        return;
+        if (error) { toast('Có lỗi xảy ra: ' + error.message, 'error'); return; }
+        closeModal('modalForm');
+        toast(id ? 'Cập nhật thành công!' : 'Thêm giao dịch thành công!', 'success');
+        selectedImageFile = null;
+        load();
+    } finally {
+        // Luôn mở khoá nút dù thành công hay lỗi
+        isSaving = false;
+        setSaveBusy(false);
     }
-
-    if (error) { toast('Có lỗi xảy ra: ' + error.message, 'error'); return; }
-    closeModal('modalForm');
-    toast(id ? 'Cập nhật thành công!' : 'Thêm giao dịch thành công!', 'success');
-    selectedImageFile = null;
-    load();
 }
 
 /* ===== DELETE ===== */
@@ -656,7 +682,9 @@ function openDetail(id) {
         var bal = t.tongConLai || 0;
         var balEl = document.getElementById('detailBal');
         balEl.textContent = moneyFull(bal);
-        balEl.className = bal >= 0 ? 'stat-value blue' : 'stat-value danger';
+        balEl.className = 'detail-value num';
+        balEl.style.color = bal >= 0 ? 'var(--info-strong)' : 'var(--danger-strong)';
+        balEl.style.fontWeight = '700';
     }
 
     if (t.anh_url) {
@@ -730,6 +758,41 @@ function copySTK() {
         toast('Đã copy số tài khoản!', 'success');
     });
 }
+
+/* ===== AUTO THEME — theo giờ Việt Nam (UTC+7) ===== */
+// 06:00 → 17:59 = sáng, 18:00 → 05:59 = tối.
+// Tự cập nhật mỗi phút nên khi qua ngưỡng 6h/18h sẽ tự đổi mà không cần reload.
+function applyTimeTheme() {
+    var h;
+    try {
+        h = parseInt(new Intl.DateTimeFormat('en-US', {
+            hour: 'numeric', hour12: false, timeZone: 'Asia/Ho_Chi_Minh'
+        }).format(new Date()), 10);
+    } catch (_) {
+        // Fallback nếu trình duyệt cũ không hỗ trợ timeZone
+        var d = new Date();
+        var utcMin = d.getUTCHours() * 60 + d.getUTCMinutes();
+        h = Math.floor(((utcMin + 7 * 60) % (24 * 60)) / 60);
+    }
+    var theme = (h >= 6 && h < 18) ? 'light' : 'dark';
+    if (document.documentElement.getAttribute('data-theme') !== theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+    }
+}
+applyTimeTheme();
+setInterval(applyTimeTheme, 60 * 1000);
+
+/* ===== BODY SCROLL LOCK (when any modal/viewer is open) ===== */
+(function () {
+    function sync() {
+        var open = document.querySelector('.overlay.open, .image-viewer.open');
+        document.body.classList.toggle('no-scroll', !!open);
+    }
+    var mo = new MutationObserver(sync);
+    document.querySelectorAll('.overlay, .image-viewer').forEach(function (el) {
+        mo.observe(el, { attributes: true, attributeFilter: ['class'] });
+    });
+})();
 
 /* ===== INIT ===== */
 loadWorkspaces();
