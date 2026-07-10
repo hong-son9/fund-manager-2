@@ -935,6 +935,8 @@ td.money-dash { color: var(--text-3); font-size: 18px; }
     justify-content: center;
     padding: var(--s-3);
 }
+/* Confirm số tiền lớn phải luôn nổi trên mọi modal khác (kể cả modal chi tiết con nợ) */
+#modalBigAmount { z-index: calc(var(--z-modal) + 20); }
 .overlay.open { display: flex; animation: fadeIn var(--t) var(--ease); }
 
 .modal {
@@ -1249,6 +1251,7 @@ input[type="date"].form-control { color-scheme: light dark; }
 .ws-vis-badge.private { background: var(--danger-soft);  color: var(--danger-strong); }
 .ws-type-badge.cashflow { background: var(--info-soft); color: var(--info-strong); }
 .ws-type-badge.trip     { background: var(--warning-soft); color: var(--warning-strong); }
+.ws-type-badge.debt     { background: var(--danger-soft); color: var(--danger-strong); }
 
 .ws-form-row { display: grid; grid-template-columns: 88px 1fr; gap: var(--s-3); }
 
@@ -1275,7 +1278,7 @@ input[type="date"].form-control { color-scheme: light dark; }
     cursor: pointer;
 }
 
-.ws-type-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3); }
+.ws-type-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--s-3); }
 .ws-type-opt {
     display: flex;
     align-items: center;
@@ -1647,4 +1650,174 @@ input[type="date"].form-control { color-scheme: light dark; }
     .stat-icon svg { width: 11px; height: 11px; }
     .stat-label { font-size: 8px; }
     .stat-value { font-size: 10px; }
+}
+
+/* =====================================================
+   DEBT WORKSPACE — Danh sách con nợ
+   ===================================================== */
+
+/* --- Grid ngoài: cột tên + ghi chú --- */
+.debtor-name-cell { min-width: 0; }
+.debtor-name { font-weight: 700; color: var(--text); }
+.debtor-note-inline {
+    display: block;
+    font-size: 12px;
+    color: var(--text-3);
+    margin-top: 2px;
+    white-space: normal;
+}
+
+/* --- Cột % còn lại (mini bar) --- */
+.debt-pct { display: flex; align-items: center; gap: var(--s-2); }
+.debt-pct-bar {
+    flex: 1;
+    height: 8px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-full);
+    overflow: hidden;
+    min-width: 40px;
+}
+.debt-pct-bar > span {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, #f87171, #ef4444);
+    border-radius: var(--r-full);
+    transition: width var(--t-fast) var(--ease);
+}
+.debt-pct-num { font-size: 12px; font-weight: 700; color: var(--danger-strong); min-width: 34px; text-align: right; }
+.debt-pct-done {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--success-strong);
+    background: var(--success-soft);
+    padding: 3px 10px;
+    border-radius: var(--r-full);
+    white-space: nowrap;
+}
+
+/* --- Modal chi tiết: summary --- */
+.debtor-summary {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--s-3);
+    margin-bottom: var(--s-5);
+}
+.debtor-sum-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: var(--s-3);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    text-align: center;
+}
+.debtor-sum-item .lbl { font-size: 11px; color: var(--text-2); font-weight: 600; }
+.debtor-sum-item strong { font-size: 15px; font-weight: 800; color: var(--text); }
+.debtor-sum-item strong.in  { color: var(--success-strong); }
+.debtor-sum-item strong.out { color: var(--danger-strong); }
+
+/* --- Modal chi tiết: form thêm/sửa khoản --- */
+.debtor-form {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: var(--s-4);
+    margin-bottom: var(--s-5);
+}
+.debtor-form h4 { margin: 0 0 var(--s-3); font-size: 14px; font-weight: 700; color: var(--text); }
+.debtor-kind-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3); margin-bottom: var(--s-3); }
+.debtor-kind-opt {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s-2);
+    padding: var(--s-3);
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    user-select: none;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-2);
+    transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+.debtor-kind-opt input[type="radio"] { position: absolute; opacity: 0; width: 0; height: 0; }
+.debtor-kind-opt.debt:has(input:checked) {
+    border-color: var(--danger-strong);
+    background: var(--danger-soft);
+    color: var(--danger-strong);
+}
+.debtor-kind-opt.payment:has(input:checked) {
+    border-color: var(--success-strong);
+    background: var(--success-soft);
+    color: var(--success-strong);
+}
+.debtor-form-actions { display: flex; justify-content: flex-end; gap: var(--s-3); margin-top: var(--s-3); }
+
+/* --- Modal chi tiết: danh sách khoản --- */
+.debtor-entries-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--s-3);
+}
+.debtor-entries-head h4 { margin: 0; font-size: 14px; font-weight: 700; color: var(--text); }
+.debtor-entries { display: flex; flex-direction: column; gap: var(--s-3); }
+.debt-entry-empty {
+    padding: var(--s-5);
+    text-align: center;
+    color: var(--text-3);
+    font-size: 13px;
+    background: var(--surface-2);
+    border: 1px dashed var(--border-2);
+    border-radius: var(--r-sm);
+}
+.debt-entry {
+    padding: var(--s-3);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--border-2);
+    border-radius: var(--r-sm);
+}
+.debt-entry.debt    { border-left-color: var(--danger-strong); }
+.debt-entry.payment { border-left-color: var(--success-strong); }
+.debt-entry-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
+.debt-entry-main { display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap; min-width: 0; }
+.debt-entry-badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: var(--r-full);
+    white-space: nowrap;
+}
+.debt-entry-badge.debt    { background: var(--danger-soft);  color: var(--danger-strong); }
+.debt-entry-badge.payment { background: var(--success-soft); color: var(--success-strong); }
+.debt-entry-amount { font-size: 15px; font-weight: 800; }
+.debt-entry-amount.in  { color: var(--success-strong); }
+.debt-entry-amount.out { color: var(--danger-strong); }
+.debt-entry-date { font-size: 12px; color: var(--text-3); font-weight: 600; }
+.debt-entry-actions { display: flex; gap: var(--s-2); flex-shrink: 0; }
+.debt-entry-note {
+    margin-top: var(--s-2);
+    font-size: 13px;
+    color: var(--text-2);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.debt-entry-img {
+    margin-top: var(--s-3);
+    max-width: 140px;
+    max-height: 120px;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    object-fit: cover;
+}
+
+@media (max-width: 560px) {
+    .debtor-summary { grid-template-columns: repeat(2, 1fr); }
+    .debt-entry-img { max-width: 100%; }
 }

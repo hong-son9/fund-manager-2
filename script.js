@@ -32,6 +32,15 @@ var currentWorkspace     = null;   // workspace object đang xem (null = đang �
 var deleteWsId           = null;
 var workspacesInitialized = false; // đã fetch workspace lần đầu chưa
 
+/* ===== DEBT STATE (workspace type='debt') ===== */
+var debtors              = [];     // [{id,name,note,entries:[...],totalDebt,totalPaid,remaining}]
+var currentDebtorId      = null;   // con nợ đang mở chi tiết
+var delDebtorId          = null;   // con nợ chờ xác nhận xóa
+var delEntryId           = null;   // khoản (entry) chờ xác nhận xóa
+var selectedEntryImageFile = null; // file ảnh đang chọn cho form khoản
+var removeEntryImageFlag   = false;
+var isSavingEntry        = false;  // chống double-submit khi thêm/sửa khoản
+
 /* ===== AUTH STATE ===== */
 function setAdminUI(loggedIn) {
     var changed = isAdmin !== loggedIn;
@@ -200,12 +209,52 @@ function selectWorkspace(ws) {
 }
 
 function isTrip(ws) { return ws && ws.type === 'trip'; }
+function isDebt(ws) { return ws && ws.type === 'debt'; }
 
-// Đổi tiêu đề cột 6 + ẩn/hiện Ghi chú trong form theo type của quỹ hiện tại
+// Đổi cấu trúc bảng + nhãn stat + ẩn/hiện Ghi chú trong form theo type của quỹ hiện tại
 function applyWorkspaceLayout() {
     var trip = isTrip(currentWorkspace);
-    var col6 = document.getElementById('colHead6');
-    if (col6) col6.textContent = trip ? 'Ghi Chú' : 'Tổng Còn Lại';
+    var debt = isDebt(currentWorkspace);
+
+    // ---- Header của bảng ----
+    var headRow = document.getElementById('tableHeadRow');
+    if (headRow) {
+        if (debt) {
+            headRow.innerHTML =
+                '<th style="width:48px">#</th>' +
+                '<th>Tên con nợ</th>' +
+                '<th style="width:150px">Tổng nợ</th>' +
+                '<th style="width:150px">Đã trả</th>' +
+                '<th style="width:160px">Còn lại</th>' +
+                '<th style="width:120px">% còn lại</th>' +
+                '<th style="width:110px">Thao tác</th>';
+        } else {
+            headRow.innerHTML =
+                '<th style="width:48px">#</th>' +
+                '<th style="width:130px">Ngày</th>' +
+                '<th style="width:160px">Tiền vào</th>' +
+                '<th style="width:160px">Tiền ra</th>' +
+                '<th>Nội dung</th>' +
+                '<th id="colHead6" style="width:220px">' + (trip ? 'Ghi Chú' : 'Tổng Còn Lại') + '</th>' +
+                '<th style="width:110px">Thao tác</th>';
+        }
+    }
+
+    // ---- Nhãn 3 thẻ stat ----
+    var li = document.getElementById('statLabelIn');
+    var lo = document.getElementById('statLabelOut');
+    var lb = document.getElementById('statLabelBal');
+    if (debt) {
+        if (li) li.textContent = 'Tổng nợ';
+        if (lo) lo.textContent = 'Đã trả';
+        if (lb) lb.textContent = 'Còn lại';
+    } else {
+        if (li) li.textContent = 'Tổng tiền vào';
+        if (lo) lo.textContent = 'Tổng tiền ra';
+        if (lb) lb.textContent = 'Số dư hiện tại';
+    }
+
+    // ---- Form giao dịch: chỉ trip mới có ô Ghi chú ----
     var grp = document.getElementById('fGhiChuGroup');
     if (grp) grp.style.display = trip ? 'block' : 'none';
 }
@@ -241,7 +290,11 @@ function updateHeaderForState() {
 
     // Admin-only buttons (chỉ khi đã login)
     if (isAdmin) {
-        document.getElementById('btnAddTx').style.display    = inWs ? 'flex' : 'none';
+        var addBtn = document.getElementById('btnAddTx');
+        addBtn.style.display = inWs ? 'flex' : 'none';
+        // Nhãn nút "Thêm" đổi theo loại quỹ
+        var addLbl = addBtn.querySelector('.lbl');
+        if (addLbl) addLbl.textContent = isDebt(currentWorkspace) ? 'Thêm con nợ' : 'Thêm giao dịch';
         document.getElementById('btnManageWs').style.display = 'flex';
     }
 }
@@ -299,9 +352,12 @@ function renderManageList() {
         var badgeVis = isPub
             ? '<span class="ws-vis-badge public">Công khai</span>'
             : '<span class="ws-vis-badge private">Đã ẩn</span>';
+        var isDebtWs = (ws.type === 'debt');
         var badgeType = isTripWs
             ? '<span class="ws-type-badge trip">✈️ Đóng quỹ</span>'
-            : '<span class="ws-type-badge cashflow">📊 Sổ thu/chi</span>';
+            : (isDebtWs
+                ? '<span class="ws-type-badge debt">🧾 Con nợ</span>'
+                : '<span class="ws-type-badge cashflow">📊 Sổ thu/chi</span>');
         var targetBtn = isTripWs
             ? '<button class="btn-icon target" onclick="openEditTarget(' + ws.id + ')" title="Sửa mục tiêu">🎯</button>'
             : '';
@@ -444,6 +500,7 @@ async function loadWorkspacesPreserveCurrent() {
 /* ===== LOAD TRANSACTIONS ===== */
 async function load() {
     if (!IS_CONFIGURED || !currentWorkspace) return;
+    if (isDebt(currentWorkspace)) { loadDebtors(); return; }
     var { data, error } = await db
         .from('transactions')
         .select('*')
@@ -468,6 +525,7 @@ async function load() {
 
 /* ===== RENDER ===== */
 function render() {
+    if (isDebt(currentWorkspace)) { renderDebtors(); return; }
     var tbody = document.getElementById('tbody');
     if (!tbody) return;
     var display = getDisplayRows();
@@ -517,6 +575,7 @@ function render() {
 // LUÔN tính trên toàn bộ rows — filter chỉ ảnh hưởng bảng giao dịch,
 // stats (tổng vào, tổng ra, số dư) phản ánh trạng thái thật của quỹ.
 function stats() {
+    if (isDebt(currentWorkspace)) { statsDebt(); return; }
     var totalIn = 0, totalOut = 0;
     rows.forEach(function(t) { totalIn += t.tien_vao||0; totalOut += t.tien_ra||0; });
     var bal = totalIn - totalOut;
@@ -603,6 +662,7 @@ initImagePreview();
 /* ===== OPEN ADD ===== */
 function openAdd() {
     if (!currentWorkspace) { toast('Hãy chọn quỹ trước!', 'error'); return; }
+    if (isDebt(currentWorkspace)) { openAddDebtor(); return; }
     document.getElementById('modalTitle').textContent = '➕ Thêm giao dịch';
     document.getElementById('fId').value      = '';
     document.getElementById('fNgay').value    = today();
@@ -948,7 +1008,8 @@ function clearFilters() {
 function applyFilterVisibility() {
     var bar = document.getElementById('filterBar');
     if (!bar) return;
-    var show = !currentWorkspace || (currentWorkspace.show_filter !== false);
+    // Quỹ con nợ không dùng thanh lọc giao dịch.
+    var show = !currentWorkspace || (!isDebt(currentWorkspace) && currentWorkspace.show_filter !== false);
     bar.hidden = !show;
     if (!show && isFilterActive()) clearFilters();
 }
@@ -1053,6 +1114,448 @@ async function saveTarget() {
     renderManageList();
     renderTargetCard();
 }
+
+/* =====================================================
+   ===== DEBT WORKSPACE (type='debt') — Danh sách con nợ
+   Mỗi con nợ (debtors) là 1 sổ gồm nhiều khoản (debt_entries):
+     kind='debt'    -> ghi nợ / vay thêm (tăng nợ)
+     kind='payment' -> trả tiền           (giảm nợ)
+   Còn lại = tổng nợ − tổng đã trả. % còn lại = còn lại / tổng nợ.
+   ===================================================== */
+
+/* ----- LOAD ----- */
+async function loadDebtors() {
+    if (!IS_CONFIGURED || !currentWorkspace) return;
+    var res = await db
+        .from('debtors')
+        .select('*')
+        .eq('workspace_id', currentWorkspace.id)
+        .order('created_at', { ascending: true })
+        .order('id',         { ascending: true });
+    if (res.error) { toast('Lỗi tải danh sách con nợ!', 'error'); return; }
+    var ds = res.data || [];
+
+    var ids = ds.map(function (d) { return d.id; });
+    var entries = [];
+    if (ids.length) {
+        var res2 = await db
+            .from('debt_entries')
+            .select('*')
+            .in('debtor_id', ids)
+            .order('ngay', { ascending: true })
+            .order('id',   { ascending: true });
+        if (res2.error) { toast('Lỗi tải chi tiết nợ!', 'error'); return; }
+        entries = res2.data || [];
+    }
+
+    var byDebtor = {};
+    entries.forEach(function (e) {
+        (byDebtor[e.debtor_id] = byDebtor[e.debtor_id] || []).push(e);
+    });
+
+    debtors = ds.map(function (d) {
+        var list = byDebtor[d.id] || [];
+        var totalDebt = 0, totalPaid = 0;
+        list.forEach(function (e) {
+            if (e.kind === 'debt') totalDebt += (e.amount || 0);
+            else                   totalPaid += (e.amount || 0);
+        });
+        return Object.assign({}, d, {
+            entries:   list,
+            totalDebt: totalDebt,
+            totalPaid: totalPaid,
+            remaining: totalDebt - totalPaid
+        });
+    });
+
+    render();
+    stats();
+
+    // Nếu đang mở chi tiết 1 con nợ thì refresh luôn modal
+    if (currentDebtorId != null &&
+        document.getElementById('modalDebtor').classList.contains('open')) {
+        renderDebtorModal();
+    }
+}
+
+/* ----- STATS ----- */
+function statsDebt() {
+    var totalDebt = 0, totalPaid = 0;
+    debtors.forEach(function (d) { totalDebt += d.totalDebt; totalPaid += d.totalPaid; });
+    var remaining = totalDebt - totalPaid;
+
+    var elIn  = document.getElementById('statIn');   // Tổng nợ
+    var elOut = document.getElementById('statOut');  // Đã trả
+    var elBal = document.getElementById('statBal');  // Còn lại
+    elIn.textContent  = moneyFull(totalDebt);
+    elIn.className    = 'stat-value num blue';
+    elOut.textContent = moneyFull(totalPaid);
+    elOut.className   = 'stat-value num green';
+    elBal.textContent = moneyFull(remaining);
+    elBal.className   = 'stat-value num ' + (remaining > 0 ? 'danger' : 'green');
+}
+
+function debtPercentRemaining(d) {
+    if (d.totalDebt <= 0) return d.remaining > 0 ? 100 : 0;
+    var pct = Math.round(d.remaining / d.totalDebt * 100);
+    return Math.max(0, Math.min(100, pct));
+}
+
+/* ----- RENDER GRID ----- */
+function renderDebtors() {
+    var tbody = document.getElementById('tbody');
+    if (!tbody) return;
+    var countEl = document.getElementById('recCount');
+    if (countEl) countEl.textContent = debtors.length + ' con nợ';
+
+    if (debtors.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7"><div class="state-box"><div class="icon">🧾</div><h3>Chưa có con nợ nào</h3><p>' +
+            (isAdmin ? 'Nhấn "Thêm con nợ" để thêm người đầu tiên' : 'Quỹ này chưa có con nợ') +
+            '</p></div></td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = debtors.map(function (d, i) {
+        var pct = debtPercentRemaining(d);
+        var paidOff = d.remaining <= 0;
+        var pctCell = paidOff
+            ? '<span class="debt-pct-done">✓ Đã trả đủ</span>'
+            : '<div class="debt-pct"><div class="debt-pct-bar"><span style="width:' + pct + '%"></span></div><span class="debt-pct-num">' + pct + '%</span></div>';
+        var nameCell = '<td class="debtor-name-cell"><span class="debtor-name">' + escHtml(d.name) + '</span>' +
+            (d.note ? '<span class="debtor-note-inline">' + escHtml(d.note) + '</span>' : '') + '</td>';
+        return '<tr onclick="openDebtor(' + d.id + ')" style="cursor:pointer">'
+            + '<td class="stt">' + (i + 1) + '</td>'
+            + nameCell
+            + '<td class="money-out">' + moneyFull(d.totalDebt) + '</td>'
+            + '<td class="money-in">' + moneyFull(d.totalPaid) + '</td>'
+            + '<td><span class="bal ' + (d.remaining > 0 ? 'neg' : 'pos') + '">' + moneyFull(d.remaining) + '</span></td>'
+            + '<td>' + pctCell + '</td>'
+            + '<td><div class="action-btns">'
+            + (isAdmin
+                ? '<button class="btn-icon edit" onclick="event.stopPropagation(); openRenameDebtor(' + d.id + ')" title="Sửa tên / ghi chú">✏️</button>'
+                + '<button class="btn-icon del" onclick="event.stopPropagation(); confirmDelDebtor(' + d.id + ')" title="Xóa con nợ">🗑️</button>'
+                : '<span style="color:#cbd5e0;font-size:18px">—</span>')
+            + '</div></td></tr>';
+    }).join('');
+}
+
+/* ----- ADD / RENAME DEBTOR ----- */
+function openAddDebtor() {
+    document.getElementById('debtorNameTitle').textContent = '➕ Thêm con nợ';
+    document.getElementById('debtorNameId').value    = '';
+    document.getElementById('debtorNameInput').value  = '';
+    document.getElementById('debtorNoteInput').value  = '';
+    document.getElementById('modalDebtorName').classList.add('open');
+    setTimeout(function () { document.getElementById('debtorNameInput').focus(); }, 120);
+}
+
+function openRenameDebtor(id) {
+    var d = debtors.find(function (x) { return x.id === id; });
+    if (!d) return;
+    document.getElementById('debtorNameTitle').textContent = '✏️ Sửa con nợ';
+    document.getElementById('debtorNameId').value    = d.id;
+    document.getElementById('debtorNameInput').value  = d.name || '';
+    document.getElementById('debtorNoteInput').value  = d.note || '';
+    document.getElementById('modalDebtorName').classList.add('open');
+    setTimeout(function () { document.getElementById('debtorNameInput').focus(); }, 120);
+}
+
+async function saveDebtorName() {
+    if (!currentWorkspace) { toast('Không xác định được quỹ!', 'error'); return; }
+    var id   = document.getElementById('debtorNameId').value;
+    var name = document.getElementById('debtorNameInput').value.trim();
+    var note = document.getElementById('debtorNoteInput').value.trim();
+    if (!name) { toast('Vui lòng nhập tên con nợ!', 'error'); return; }
+
+    var error;
+    if (id) {
+        var resU = await db.from('debtors').update({ name: name, note: note || null }).eq('id', id);
+        error = resU.error;
+    } else {
+        var resI = await db.from('debtors').insert({
+            workspace_id: currentWorkspace.id,
+            name: name,
+            note: note || null
+        });
+        error = resI.error;
+    }
+    if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+
+    closeModal('modalDebtorName');
+    toast(id ? 'Đã cập nhật con nợ!' : 'Đã thêm con nợ "' + name + '"!', 'success');
+    loadDebtors();
+}
+
+/* ----- DELETE DEBTOR ----- */
+function confirmDelDebtor(id) {
+    var d = debtors.find(function (x) { return x.id === id; });
+    if (!d) return;
+    delDebtorId = id;
+    document.getElementById('delDebtorName').textContent = d.name;
+    document.getElementById('modalDelDebtor').classList.add('open');
+}
+
+async function doDeleteDebtor() {
+    if (!delDebtorId) return;
+    var deletedId = delDebtorId;
+    var { error } = await db.from('debtors').delete().eq('id', deletedId);
+    if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+    closeModal('modalDelDebtor');
+    toast('Đã xóa con nợ!', 'success');
+    delDebtorId = null;
+    // Nếu đang mở chi tiết đúng con nợ vừa xóa -> đóng modal chi tiết
+    if (currentDebtorId === deletedId) {
+        closeModal('modalDebtor');
+        currentDebtorId = null;
+    }
+    loadDebtors();
+}
+
+/* ----- DEBTOR DETAIL MODAL ----- */
+function openDebtor(id) {
+    currentDebtorId = id;
+    resetDebtorEntryForm();
+    document.getElementById('dNgay').value = today();
+    renderDebtorModal();
+    document.getElementById('modalDebtor').classList.add('open');
+}
+
+function currentDebtor() {
+    return debtors.find(function (x) { return x.id === currentDebtorId; }) || null;
+}
+
+function renderDebtorModal() {
+    var d = currentDebtor();
+    if (!d) return;
+
+    document.getElementById('debtorTitle').textContent = '🧾 ' + d.name;
+
+    var pct = debtPercentRemaining(d);
+    var remClass = d.remaining > 0 ? 'out' : 'in';
+    document.getElementById('debtorSummary').innerHTML =
+        '<div class="debtor-sum-item"><span class="lbl">Tổng nợ</span><strong class="num">' + moneyFull(d.totalDebt) + '</strong></div>' +
+        '<div class="debtor-sum-item"><span class="lbl">Đã trả</span><strong class="num in">' + moneyFull(d.totalPaid) + '</strong></div>' +
+        '<div class="debtor-sum-item"><span class="lbl">Còn lại</span><strong class="num ' + remClass + '">' + moneyFull(d.remaining) + '</strong></div>' +
+        '<div class="debtor-sum-item"><span class="lbl">% còn lại</span><strong class="num">' + (d.remaining <= 0 ? '✓ đủ' : pct + '%') + '</strong></div>';
+
+    // Form thêm/sửa khoản chỉ dành cho admin
+    document.getElementById('debtorForm').style.display = isAdmin ? 'block' : 'none';
+
+    renderDebtorEntries();
+}
+
+function renderDebtorEntries() {
+    var d = currentDebtor();
+    var wrap = document.getElementById('debtorEntries');
+    var countEl = document.getElementById('debtorEntryCount');
+    if (!d || !wrap) return;
+
+    var list = d.entries.slice().reverse(); // mới nhất lên đầu
+    if (countEl) countEl.textContent = list.length + ' khoản';
+
+    if (list.length === 0) {
+        wrap.innerHTML = '<div class="debt-entry-empty">Chưa có khoản nào. ' +
+            (isAdmin ? 'Dùng form phía trên để ghi nợ hoặc ghi nhận trả tiền.' : '') + '</div>';
+        return;
+    }
+
+    wrap.innerHTML = list.map(function (e) {
+        var isDebtKind = e.kind === 'debt';
+        var badge = isDebtKind
+            ? '<span class="debt-entry-badge debt">📈 Ghi nợ</span>'
+            : '<span class="debt-entry-badge payment">💵 Trả tiền</span>';
+        var amt = (isDebtKind ? '+' : '−') + moneyFull(e.amount || 0);
+        var img = e.anh_url
+            ? '<img class="debt-entry-img" src="' + e.anh_url + '" alt="Ảnh khoản" onclick="openImageViewer(\'' + e.anh_url + '\')">'
+            : '';
+        var note = e.note ? '<div class="debt-entry-note">' + escHtml(e.note) + '</div>' : '';
+        var actions = isAdmin
+            ? '<div class="debt-entry-actions">' +
+                '<button class="btn-icon edit" onclick="editDebtorEntry(' + e.id + ')" title="Sửa">✏️</button>' +
+                '<button class="btn-icon del" onclick="openDelEntry(' + e.id + ')" title="Xóa">🗑️</button>' +
+              '</div>'
+            : '';
+        return '<div class="debt-entry ' + (isDebtKind ? 'debt' : 'payment') + '">' +
+            '<div class="debt-entry-row">' +
+                '<div class="debt-entry-main">' + badge +
+                    '<span class="debt-entry-amount num ' + (isDebtKind ? 'out' : 'in') + '">' + amt + '</span>' +
+                    '<span class="debt-entry-date num">' + (e.ngay ? fmtDate(e.ngay) : '') + '</span>' +
+                '</div>' + actions +
+            '</div>' + note + img +
+        '</div>';
+    }).join('');
+}
+
+/* ----- ADD / EDIT DEBT ENTRY ----- */
+function resetDebtorEntryForm() {
+    document.getElementById('dEntryId').value = '';
+    document.getElementById('dAmount').value  = '';
+    document.getElementById('dNote').value    = '';
+    document.getElementById('dAnh').value     = '';
+    document.getElementById('dNgay').value    = today();
+    var r = document.querySelector('input[name="dKind"][value="debt"]');
+    if (r) r.checked = true;
+    selectedEntryImageFile = null;
+    removeEntryImageFlag = false;
+    document.getElementById('dPreview').style.display = 'none';
+    document.getElementById('dRemoveImg').style.display = 'none';
+    document.getElementById('dEntryId').value = '';
+    document.getElementById('debtorFormTitle').textContent = '➕ Thêm khoản';
+    document.getElementById('dSaveEntry').innerHTML = '💾 Thêm khoản';
+    document.getElementById('dCancelEdit').style.display = 'none';
+}
+
+function editDebtorEntry(id) {
+    var d = currentDebtor();
+    if (!d) return;
+    var e = d.entries.find(function (x) { return x.id === id; });
+    if (!e) return;
+    document.getElementById('dEntryId').value = e.id;
+    document.getElementById('dAmount').value  = e.amount > 0 ? formatMoneyInputValue(e.amount) : '';
+    document.getElementById('dNote').value    = e.note || '';
+    document.getElementById('dNgay').value    = e.ngay || today();
+    var r = document.querySelector('input[name="dKind"][value="' + (e.kind === 'debt' ? 'debt' : 'payment') + '"]');
+    if (r) r.checked = true;
+    document.getElementById('dAnh').value = '';
+    selectedEntryImageFile = null;
+    removeEntryImageFlag = false;
+    if (e.anh_url) {
+        document.getElementById('dPreviewImg').src = e.anh_url;
+        document.getElementById('dPreview').style.display = 'block';
+        document.getElementById('dRemoveImg').style.display = 'inline-flex';
+    } else {
+        document.getElementById('dPreview').style.display = 'none';
+        document.getElementById('dRemoveImg').style.display = 'none';
+    }
+    document.getElementById('debtorFormTitle').textContent = '✏️ Sửa khoản';
+    document.getElementById('dSaveEntry').innerHTML = '💾 Cập nhật';
+    document.getElementById('dCancelEdit').style.display = 'inline-flex';
+    // Cuộn form vào tầm nhìn
+    document.getElementById('debtorForm').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function saveDebtorEntry() {
+    if (isSavingEntry) return;
+    var d = currentDebtor();
+    if (!d) { toast('Không xác định được con nợ!', 'error'); return; }
+
+    var id     = document.getElementById('dEntryId').value;
+    var kindEl = document.querySelector('input[name="dKind"]:checked');
+    var kind   = kindEl ? kindEl.value : 'debt';
+    var amount = parseMoneyInput(document.getElementById('dAmount').value);
+    var ngay   = document.getElementById('dNgay').value;
+    var note   = document.getElementById('dNote').value.trim();
+
+    if (amount <= 0) { toast('Vui lòng nhập số tiền!', 'error'); return; }
+    if (ngay) {
+        var year = parseInt(ngay.split('-')[0]);
+        if (isNaN(year) || year < 2000 || year > 2099) { toast('Năm không hợp lệ (2000–2099)!', 'error'); return; }
+    }
+
+    // Confirm khi số tiền lớn
+    if (amount > BIG_AMOUNT_THRESHOLD) {
+        var ok = await askBigAmount(amount);
+        if (!ok) { document.getElementById('dAmount').focus(); return; }
+    }
+
+    isSavingEntry = true;
+    var btn = document.getElementById('dSaveEntry');
+    var originalBtn = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span> Đang lưu...';
+
+    try {
+        var payload = {
+            debtor_id: d.id,
+            kind:   kind,
+            amount: amount,
+            ngay:   ngay || null,
+            note:   note || null
+        };
+
+        if (selectedEntryImageFile) {
+            try {
+                var fileName = 'debt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                var uploadRes = await db.storage
+                    .from('transaction-images')
+                    .upload(fileName, selectedEntryImageFile, { upsert: !id });
+                if (uploadRes.error) { toast('Lỗi upload ảnh: ' + uploadRes.error.message, 'error'); return; }
+                var urlRes = db.storage.from('transaction-images').getPublicUrl(fileName);
+                if (urlRes && urlRes.data) payload.anh_url = urlRes.data.publicUrl;
+            } catch (err) { toast('Lỗi: ' + err.message, 'error'); return; }
+        } else if (removeEntryImageFlag) {
+            payload.anh_url = null;
+        }
+
+        var error;
+        if (id) {
+            var upd = Object.assign({}, payload);
+            delete upd.debtor_id; // không đổi chủ nợ khi sửa
+            var resU = await db.from('debt_entries').update(upd).eq('id', id);
+            error = resU.error;
+        } else {
+            var resI = await db.from('debt_entries').insert(payload);
+            error = resI.error;
+        }
+        if (error) { toast('Có lỗi xảy ra: ' + error.message, 'error'); return; }
+
+        toast(id ? 'Đã cập nhật khoản!' : 'Đã thêm khoản!', 'success');
+        resetDebtorEntryForm();
+        await loadDebtors(); // refresh grid + modal (nếu còn mở)
+    } finally {
+        isSavingEntry = false;
+        btn.disabled = false;
+        btn.innerHTML = originalBtn;
+    }
+}
+
+/* ----- DELETE DEBT ENTRY ----- */
+function openDelEntry(id) {
+    delEntryId = id;
+    document.getElementById('modalDelEntry').classList.add('open');
+}
+
+async function doDeleteEntry() {
+    if (!delEntryId) return;
+    var { error } = await db.from('debt_entries').delete().eq('id', delEntryId);
+    if (error) { toast('Có lỗi xảy ra!', 'error'); return; }
+    closeModal('modalDelEntry');
+    toast('Đã xóa khoản!', 'success');
+    delEntryId = null;
+    loadDebtors();
+}
+
+/* ----- DEBT ENTRY IMAGE PREVIEW ----- */
+(function initDebtEntryImagePreview() {
+    var fileInput = document.getElementById('dAnh');
+    var removeBtn = document.getElementById('dRemoveImg');
+    if (!fileInput || !removeBtn) return;
+    fileInput.addEventListener('change', function (e) {
+        var file = e.target.files[0];
+        if (file) {
+            removeEntryImageFlag = false;
+            selectedEntryImageFile = file;
+            removeBtn.style.display = 'inline-flex';
+            var reader = new FileReader();
+            reader.onload = function (ev) {
+                document.getElementById('dPreviewImg').src = ev.target.result;
+                document.getElementById('dPreview').style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        } else {
+            selectedEntryImageFile = null;
+            document.getElementById('dPreview').style.display = 'none';
+            removeBtn.style.display = 'none';
+        }
+    });
+    removeBtn.addEventListener('click', function () {
+        selectedEntryImageFile = null;
+        removeEntryImageFlag = true;
+        fileInput.value = '';
+        document.getElementById('dPreview').style.display = 'none';
+        removeBtn.style.display = 'none';
+    });
+})();
 
 /* ===== AUTO THEME — theo giờ Việt Nam (UTC+7) ===== */
 // 06:00 → 17:59 = sáng, 18:00 → 05:59 = tối.

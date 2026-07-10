@@ -163,7 +163,7 @@
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
             </div>
             <div>
-                <div class="stat-label">Tổng tiền vào</div>
+                <div class="stat-label" id="statLabelIn">Tổng tiền vào</div>
                 <div class="stat-value green num" id="statIn">—</div>
             </div>
         </div>
@@ -172,7 +172,7 @@
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>
             </div>
             <div>
-                <div class="stat-label">Tổng tiền ra</div>
+                <div class="stat-label" id="statLabelOut">Tổng tiền ra</div>
                 <div class="stat-value red num" id="statOut">—</div>
             </div>
         </div>
@@ -181,7 +181,7 @@
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.4"/><path d="M6 12h.01"/><path d="M18 12h.01"/></svg>
             </div>
             <div>
-                <div class="stat-label">Số dư hiện tại</div>
+                <div class="stat-label" id="statLabelBal">Số dư hiện tại</div>
                 <div class="stat-value blue num" id="statBal">—</div>
             </div>
         </div>
@@ -213,7 +213,7 @@
         <div class="table-wrap">
             <table>
                 <thead>
-                    <tr>
+                    <tr id="tableHeadRow">
                         <th style="width:48px">#</th>
                         <th style="width:130px">Ngày</th>
                         <th style="width:160px">Tiền vào</th>
@@ -388,6 +388,14 @@
                             <small>Cột "Ghi chú"</small>
                         </span>
                     </label>
+                    <label class="ws-type-opt">
+                        <input type="radio" name="wsType" value="debt">
+                        <span class="ws-type-icon">🧾</span>
+                        <span class="ws-type-text">
+                            <strong>Danh sách con nợ</strong>
+                            <small>Theo dõi nợ &amp; trả</small>
+                        </span>
+                    </label>
                 </div>
                 <div class="ws-trip-extra">
                     <div class="form-group" style="margin-bottom:0">
@@ -505,6 +513,122 @@
         <div class="modal-foot">
             <button class="btn btn-ghost" onclick="closeModal('modalEditTarget')">Hủy</button>
             <button class="btn btn-primary" onclick="saveTarget()">💾 Lưu mục tiêu</button>
+        </div>
+    </div>
+</div>
+
+<!-- ADD / RENAME DEBTOR (admin, debt workspaces) -->
+<div class="overlay" id="modalDebtorName" role="dialog" aria-modal="true" aria-labelledby="debtorNameTitle">
+    <div class="modal" style="max-width:420px">
+        <div class="modal-head">
+            <h3 id="debtorNameTitle">➕ Thêm con nợ</h3>
+            <button class="modal-x" onclick="closeModal('modalDebtorName')" aria-label="Đóng">✕</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="debtorNameId">
+            <div class="form-group">
+                <label for="debtorNameInput">Tên con nợ <span class="req">*</span></label>
+                <input type="text" class="form-control" id="debtorNameInput" placeholder="VD: Thuỳ, Linh..." onkeydown="if(event.key==='Enter') saveDebtorName()">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+                <label for="debtorNoteInput">📌 Ghi chú (tùy chọn)</label>
+                <textarea class="form-control" id="debtorNoteInput" placeholder="VD: Bạn cùng phòng, mượn hồi tháng 6..." style="min-height:60px"></textarea>
+            </div>
+        </div>
+        <div class="modal-foot">
+            <button class="btn btn-ghost" onclick="closeModal('modalDebtorName')">Hủy</button>
+            <button class="btn btn-primary" onclick="saveDebtorName()">💾 Lưu</button>
+        </div>
+    </div>
+</div>
+
+<!-- DEBTOR DETAIL (grid row detail: summary + add entry + entries list) -->
+<div class="overlay" id="modalDebtor" role="dialog" aria-modal="true" aria-labelledby="debtorTitle">
+    <div class="modal" style="max-width:560px">
+        <div class="modal-head">
+            <h3 id="debtorTitle">🧾 Chi tiết con nợ</h3>
+            <button class="modal-x" onclick="closeModal('modalDebtor')" aria-label="Đóng">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="debtor-summary" id="debtorSummary"></div>
+
+            <!-- Add / edit entry form (admin only) -->
+            <div class="debtor-form" id="debtorForm">
+                <h4 id="debtorFormTitle">➕ Thêm khoản</h4>
+                <input type="hidden" id="dEntryId">
+                <div class="debtor-kind-row">
+                    <label class="debtor-kind-opt debt">
+                        <input type="radio" name="dKind" value="debt" checked>
+                        <span>📈 Ghi nợ</span>
+                    </label>
+                    <label class="debtor-kind-opt payment">
+                        <input type="radio" name="dKind" value="payment">
+                        <span>💵 Trả tiền</span>
+                    </label>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="dAmount">Số tiền (đ) <span class="req">*</span></label>
+                        <input type="text" class="form-control num money-input" id="dAmount" placeholder="0" inputmode="numeric" autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                        <label for="dNgay">Ngày</label>
+                        <input type="date" class="form-control" id="dNgay" min="2000-01-01" max="2099-12-31" oninput="fixYear(this)">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="dNote">📌 Ghi chú</label>
+                    <textarea class="form-control" id="dNote" placeholder="Mô tả khoản này..." style="min-height:52px"></textarea>
+                </div>
+                <div class="form-group" style="margin-bottom:0">
+                    <label for="dAnh">Ảnh (tùy chọn)</label>
+                    <input type="file" class="form-control" id="dAnh" accept="image/*">
+                    <div id="dPreview" class="preview-box">
+                        <img id="dPreviewImg" alt="Xem trước ảnh">
+                        <button type="button" class="btn btn-ghost" id="dRemoveImg" style="margin-top:10px;display:none">🗑️ Xóa ảnh</button>
+                    </div>
+                </div>
+                <div class="debtor-form-actions">
+                    <button class="btn btn-ghost" id="dCancelEdit" style="display:none" onclick="resetDebtorEntryForm()">Hủy sửa</button>
+                    <button class="btn btn-primary" id="dSaveEntry" onclick="saveDebtorEntry()">💾 Thêm khoản</button>
+                </div>
+            </div>
+
+            <div class="debtor-entries-head">
+                <h4>📜 Lịch sử nợ &amp; trả</h4>
+                <span class="badge" id="debtorEntryCount">0 khoản</span>
+            </div>
+            <div class="debtor-entries" id="debtorEntries"></div>
+        </div>
+    </div>
+</div>
+
+<!-- DELETE DEBTOR CONFIRM -->
+<div class="overlay" id="modalDelDebtor" role="dialog" aria-modal="true" aria-labelledby="delDebtorTitle">
+    <div class="modal" style="max-width:420px">
+        <div class="confirm-body">
+            <div class="icon" aria-hidden="true">🗑️</div>
+            <h3 id="delDebtorTitle">Xóa con nợ <span id="delDebtorName" style="color:var(--danger)"></span>?</h3>
+            <p>Toàn bộ lịch sử nợ &amp; trả của người này sẽ bị xóa và <strong>không thể khôi phục</strong>.</p>
+        </div>
+        <div class="modal-foot">
+            <button class="btn btn-ghost" onclick="closeModal('modalDelDebtor')">Hủy</button>
+            <button class="btn btn-red" onclick="doDeleteDebtor()">🗑️ Xóa</button>
+        </div>
+    </div>
+</div>
+
+<!-- DELETE DEBT ENTRY CONFIRM -->
+<div class="overlay" id="modalDelEntry" role="dialog" aria-modal="true" aria-labelledby="delEntryTitle">
+    <div class="modal" style="max-width:400px">
+        <div class="confirm-body">
+            <div class="icon" aria-hidden="true">🗑️</div>
+            <h3 id="delEntryTitle">Xóa khoản này?</h3>
+            <p>Hành động này không thể hoàn tác.</p>
+        </div>
+        <div class="modal-foot">
+            <button class="btn btn-ghost" onclick="closeModal('modalDelEntry')">Hủy</button>
+            <button class="btn btn-red" onclick="doDeleteEntry()">🗑️ Xóa</button>
         </div>
     </div>
 </div>
