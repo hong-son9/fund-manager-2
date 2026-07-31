@@ -1,0 +1,11 @@
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs / tam
+*.log
+node_modules/
