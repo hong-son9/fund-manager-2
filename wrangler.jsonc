@@ -1,7 +1,7 @@
 {
   // Cau hinh deploy trang TINH (HTML/CSS/JS) len Cloudflare Workers.
   // Khong co Worker script (khong "main") -> chi phuc vu file tinh.
-  "name": "fund-manager-2",
+  "name": "quy-anh-em",
   "compatibility_date": "2025-01-01",
   "assets": {
     // Thu muc chua file web. "./" = goc repo (index.html nam o goc).
