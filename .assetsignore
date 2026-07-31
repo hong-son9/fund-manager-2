@@ -1,0 +1,9 @@
+# Cac file KHONG upload cong khai (chi ban thay, khach khong tai duoc).
+# Cu phap giong .gitignore.
+*.sql
+wrangler.jsonc
+.assetsignore
+.gitignore
+.idea
+.vscode
+*.md
