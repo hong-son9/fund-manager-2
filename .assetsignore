@@ -1,9 +1,18 @@
-# Cac file KHONG upload cong khai (chi ban thay, khach khong tai duoc).
+# Cac file/thu muc KHONG upload cong khai (khach khong tai duoc).
 # Cu phap giong .gitignore.
+
+# Thu muc git (QUAN TRONG: tranh lo toan bo ma nguon + lich su)
+.git
+.git/**
+
+# Phu thuoc / IDE
+node_modules
+.idea
+.vscode
+
+# File cau hinh & tai lieu noi bo
 *.sql
 wrangler.jsonc
 .assetsignore
 .gitignore
-.idea
-.vscode
 *.md
