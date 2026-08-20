@@ -12,6 +12,15 @@
 /index.html
   Cache-Control: no-cache
 
+# PWA: service worker khong cache lau -> cap nhat kip khi deploy moi
+/sw.js
+  Cache-Control: no-cache
+
+# PWA: manifest dung content-type + khong cache lau
+/manifest.webmanifest
+  Content-Type: application/manifest+json
+  Cache-Control: no-cache
+
 # Cache lau cac file tinh (JS/CSS/anh doi ten khi sua thi tu het cache)
 /*.css
   Cache-Control: public, max-age=86400
