@@ -288,6 +288,10 @@ function updateHeaderForState() {
     document.getElementById('btnQr').style.display       = (inWs && !isAdmin) ? 'flex' : 'none';
     document.getElementById('btnSwitchWs').style.display = (inWs && hasMulti) ? 'flex' : 'none';
 
+    // Nút Xuất Excel: chỉ hiện khi ĐÃ đăng nhập (admin) và đang ở trong 1 quỹ.
+    var expBtn = document.getElementById('btnExport');
+    if (expBtn) expBtn.style.display = (inWs && isAdmin) ? 'inline-flex' : 'none';
+
     // Admin-only buttons (chỉ khi đã login)
     if (isAdmin) {
         var addBtn = document.getElementById('btnAddTx');

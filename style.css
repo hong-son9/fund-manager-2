@@ -1589,7 +1589,9 @@ input[type="date"].form-control { color-scheme: light dark; }
     .btn-qr .lbl,
     .btn-add .lbl,
     .btn-manage-ws .lbl,
+    .btn-export .lbl,
     .btn-switch-ws .lbl { display: none; }
+    .btn-export { padding: 6px; gap: 0; }
     .btn-qr, .btn-add, .btn-manage-ws, .btn-switch-ws { width: 38px; padding: 0; justify-content: center; }
     .btn-qr.icon-only { width: 38px; }
     .btn-logout, .btn-login-subtle { width: 38px; height: 38px; }

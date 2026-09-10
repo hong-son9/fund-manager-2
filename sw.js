@@ -6,7 +6,7 @@
    ============================================================ */
 
 // Doi so phien ban moi khi sua file tinh (buoc SW cap nhat cache).
-const VERSION = 'v1';
+const VERSION = 'v2';
 const CACHE = 'quy-ae-' + VERSION;
 
 // "Vo" app can cache de mo duoc khi offline.
@@ -66,18 +66,15 @@ self.addEventListener('fetch', function (e) {
     return;
   }
 
-  // File tinh same-origin: stale-while-revalidate
-  // -> tra cache ngay cho nhanh, dong thoi cap nhat ngam tu mang.
+  // File tinh same-origin: NETWORK-FIRST
+  // -> deploy moi hien ngay (lay tu mang), chi khi mat mang moi lay cache.
   e.respondWith(
-    caches.match(req).then(function (cached) {
-      var fromNet = fetch(req).then(function (res) {
-        if (res && res.status === 200 && res.type === 'basic') {
-          var copy = res.clone();
-          caches.open(CACHE).then(function (c) { c.put(req, copy); });
-        }
-        return res;
-      }).catch(function () { return cached; });
-      return cached || fromNet;
-    })
+    fetch(req).then(function (res) {
+      if (res && res.status === 200 && res.type === 'basic') {
+        var copy = res.clone();
+        caches.open(CACHE).then(function (c) { c.put(req, copy); });
+      }
+      return res;
+    }).catch(function () { return caches.match(req); })
   );
 });
