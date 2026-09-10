@@ -656,10 +656,18 @@
 
 <script src="script.js"></script>
 <script>
-    // Đăng ký service worker (PWA) — chỉ chạy khi trình duyệt hỗ trợ.
+    // Đăng ký service worker (PWA). Khi có bản deploy mới, SW mới sẽ chiếm quyền
+    // và ta TỰ TẢI LẠI trang 1 lần để lấy CSS/JS mới (tránh kẹt cache như trước).
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
+            var hadController = !!navigator.serviceWorker.controller;
             navigator.serviceWorker.register('/sw.js').catch(function () {});
+            navigator.serviceWorker.addEventListener('controllerchange', function () {
+                if (hadController && !window.__swReloaded) {
+                    window.__swReloaded = true;
+                    window.location.reload();
+                }
+            });
         });
     }
 </script>
