@@ -767,7 +767,25 @@ button:focus:not(:focus-visible) { outline: none; }
     justify-content: space-between;
     gap: var(--s-3);
     background: var(--surface-2);
+    flex-wrap: wrap;
 }
+.table-head-right { display: flex; align-items: center; gap: var(--s-3); }
+.btn-export {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: var(--r-full);
+    border: 1.5px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease), color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+}
+.btn-export:hover { border-color: var(--success-strong); color: var(--success-strong); transform: translateY(-1px); }
+.btn-export:disabled { opacity: .6; cursor: default; transform: none; }
 .table-head h2 {
     font-size: 15px;
     font-weight: 700;

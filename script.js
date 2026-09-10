@@ -1592,5 +1592,245 @@ setInterval(applyTimeTheme, 60 * 1000);
     });
 })();
 
+/* =====================================================
+   ===== XUẤT EXCEL (ExcelJS, lazy-load từ CDN)
+   - Sổ thu/chi & Đóng quỹ: 1 sheet, mỗi giao dịch 1 dòng.
+   - Danh sách con nợ: nhiều tab (1 tab/người) + tab Tổng hợp.
+   - Ảnh (nếu có) nhúng thật ở CỘT CUỐI; lỗi tải ảnh -> để link "Xem ảnh".
+   ===================================================== */
+var EXCELJS_SRC = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
+var _exceljsLoading = null;
+function loadExcelJS() {
+    if (window.ExcelJS) return Promise.resolve();
+    if (_exceljsLoading) return _exceljsLoading;
+    _exceljsLoading = new Promise(function (resolve, reject) {
+        var s = document.createElement('script');
+        s.src = EXCELJS_SRC;
+        s.onload = function () { resolve(); };
+        s.onerror = function () { _exceljsLoading = null; reject(new Error('Không tải được thư viện Excel (mạng?)')); };
+        document.head.appendChild(s);
+    });
+    return _exceljsLoading;
+}
+
+// Sắp xếp theo NGÀY GIẢM DẦN (mới nhất lên đầu); cùng ngày thì id lớn (mới) lên trước.
+function byDateDesc(a, b) {
+    var da = a.ngay || '', db = b.ngay || '';
+    if (da !== db) return da < db ? 1 : -1;
+    return (b.id || 0) - (a.id || 0);
+}
+
+function styleHeaderRow(row) {
+    row.height = 22;
+    row.eachCell(function (cell) {
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF6366F1' } };
+        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+        cell.border = { bottom: { style: 'thin', color: { argb: 'FF6366F1' } } };
+    });
+}
+
+function xlThin() { return { style: 'thin', color: { argb: 'FFE2E4F0' } }; }
+
+// Kẻ viền toàn bảng + tô sọc xen kẽ cho dòng dữ liệu (dễ đọc).
+function applyTableStyle(ws, headerRow, firstData, lastData, ncols) {
+    for (var r = headerRow; r <= lastData; r++) {
+        var row = ws.getRow(r);
+        var zebra = (r >= firstData) && (((r - firstData) % 2) === 1);
+        for (var c = 1; c <= ncols; c++) {
+            var cell = row.getCell(c);
+            cell.border = { top: xlThin(), left: xlThin(), bottom: xlThin(), right: xlThin() };
+            if (zebra) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F6FD' } };
+        }
+    }
+}
+
+// Tiêu đề + phụ đề (2 dòng merge trên cùng) cho mỗi sheet.
+function addSheetTitle(ws, ncols, title, subtitle) {
+    var last = ws.getColumn(ncols).letter;
+    ws.mergeCells('A1:' + last + '1');
+    var t = ws.getCell('A1');
+    t.value = title;
+    t.font = { bold: true, size: 15, color: { argb: 'FF4338CA' } };
+    t.alignment = { vertical: 'middle', horizontal: 'left' };
+    ws.getRow(1).height = 26;
+    ws.mergeCells('A2:' + last + '2');
+    var s = ws.getCell('A2');
+    s.value = subtitle;
+    s.font = { size: 11, color: { argb: 'FF64748B' } };
+    s.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+    ws.getRow(2).height = 18;
+}
+
+// Tên sheet hợp lệ (<=31 ký tự, không ký tự cấm, không trùng).
+function sanitizeSheetName(name, used) {
+    var base = String(name || 'Con nợ').replace(/[\\\/\?\*\[\]:]/g, ' ').trim().slice(0, 28) || 'Con nợ';
+    var n = base, k = 2;
+    while (used[n.toLowerCase()]) { n = base.slice(0, 26) + ' ' + k; k++; }
+    used[n.toLowerCase()] = true;
+    return n;
+}
+
+function exportFileName() {
+    var d = new Date(), p = function (x) { return (x < 10 ? '0' : '') + x; };
+    var stamp = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+    var base = String((currentWorkspace && currentWorkspace.name) || 'Quỹ').replace(/[\\\/:*?"<>|]/g, ' ').trim();
+    return base + ' - ' + stamp + '.xlsx';
+}
+
+function downloadBlob(blob, filename) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1500);
+}
+
+// ----- Workbook cho quỹ giao dịch (cashflow / trip) -----
+async function buildTxWorkbook(wb) {
+    var trip = isTrip(currentWorkspace);
+    var ws = wb.addWorksheet('Giao dịch');
+    var col6 = trip ? 'Ghi chú' : 'Tổng còn lại (đ)';
+    var NC = 6;
+
+    // Độ rộng cột
+    var W = [5, 13, 16, 16, 50, 22];
+    for (var i = 0; i < NC; i++) ws.getColumn(i + 1).width = W[i];
+    // Canh lề mặc định theo cột
+    ws.getColumn(1).alignment = { horizontal: 'center', vertical: 'middle' };
+    ws.getColumn(2).alignment = { horizontal: 'center', vertical: 'middle' };
+    ws.getColumn(3).alignment = { horizontal: 'right', vertical: 'middle' };
+    ws.getColumn(4).alignment = { horizontal: 'right', vertical: 'middle' };
+    ws.getColumn(5).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+    ws.getColumn(6).alignment = trip ? { horizontal: 'left', vertical: 'middle', wrapText: true } : { horizontal: 'right', vertical: 'middle' };
+    ws.getColumn(3).numFmt = '#,##0';
+    ws.getColumn(4).numFmt = '#,##0';
+    if (!trip) ws.getColumn(6).numFmt = '#,##0';
+
+    var totIn = 0, totOut = 0;
+    rows.forEach(function (t) { totIn += t.tien_vao || 0; totOut += t.tien_ra || 0; });
+    addSheetTitle(ws, NC, '📋 ' + currentWorkspace.name,
+        'Xuất ' + fmtDate(today()) + '  •  ' + rows.length + ' giao dịch  •  Tổng vào: ' + moneyFull(totIn) +
+        '  •  Tổng ra: ' + moneyFull(totOut) + (trip ? '' : ('  •  Số dư: ' + moneyFull(totIn - totOut))));
+
+    var HR = 3;
+    ws.getRow(HR).values = ['#', 'Ngày', 'Tiền vào (đ)', 'Tiền ra (đ)', 'Nội dung', col6];
+    styleHeaderRow(ws.getRow(HR));
+
+    var data = rows.slice().sort(byDateDesc);   // MỚI NHẤT LÊN ĐẦU
+    data.forEach(function (t, i) {
+        ws.getRow(HR + 1 + i).values = [
+            i + 1,
+            t.ngay ? fmtDate(t.ngay) : '',
+            t.tien_vao > 0 ? t.tien_vao : null,
+            t.tien_ra > 0 ? t.tien_ra : null,
+            t.noi_dung || '',
+            trip ? (t.ghi_chu || '') : (t.tongConLai || 0)
+        ];
+    });
+
+    applyTableStyle(ws, HR, HR + 1, HR + data.length, NC);
+    ws.autoFilter = { from: { row: HR, column: 1 }, to: { row: HR, column: NC } };
+    ws.views = [{ state: 'frozen', ySplit: HR }];
+}
+
+// ----- Workbook cho danh sách con nợ (nhiều tab) -----
+async function buildDebtWorkbook(wb) {
+    // ===== Tab TỔNG HỢP =====
+    var sum = wb.addWorksheet('Tổng hợp');
+    var SNC = 6;
+    var SW = [5, 26, 16, 16, 16, 12];
+    for (var s = 0; s < SNC; s++) sum.getColumn(s + 1).width = SW[s];
+    sum.getColumn(1).alignment = { horizontal: 'center', vertical: 'middle' };
+    sum.getColumn(2).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+    [3, 4, 5].forEach(function (c) { sum.getColumn(c).alignment = { horizontal: 'right', vertical: 'middle' }; sum.getColumn(c).numFmt = '#,##0'; });
+    sum.getColumn(6).alignment = { horizontal: 'center', vertical: 'middle' };
+
+    var gTong = 0, gTra = 0;
+    debtors.forEach(function (d) { gTong += d.totalDebt; gTra += d.totalPaid; });
+    addSheetTitle(sum, SNC, '🧾 ' + currentWorkspace.name + ' — Danh sách con nợ',
+        'Xuất ' + fmtDate(today()) + '  •  ' + debtors.length + ' người  •  Tổng nợ: ' + moneyFull(gTong) +
+        '  •  Đã trả: ' + moneyFull(gTra) + '  •  Còn lại: ' + moneyFull(gTong - gTra));
+
+    var SHR = 3;
+    sum.getRow(SHR).values = ['#', 'Tên con nợ', 'Tổng nợ (đ)', 'Đã trả (đ)', 'Còn lại (đ)', '% còn lại'];
+    styleHeaderRow(sum.getRow(SHR));
+    debtors.forEach(function (d, i) {
+        var pct = d.totalDebt > 0 ? Math.round(d.remaining / d.totalDebt * 100) : (d.remaining > 0 ? 100 : 0);
+        if (pct < 0) pct = 0; if (pct > 100) pct = 100;
+        sum.getRow(SHR + 1 + i).values = [i + 1, d.name, d.totalDebt, d.totalPaid, d.remaining, pct + '%'];
+    });
+    applyTableStyle(sum, SHR, SHR + 1, SHR + debtors.length, SNC);
+    sum.autoFilter = { from: { row: SHR, column: 1 }, to: { row: SHR, column: SNC } };
+    sum.views = [{ state: 'frozen', ySplit: SHR }];
+
+    // ===== Mỗi con nợ 1 tab =====
+    var used = {};
+    var NC = 5;
+    for (var k = 0; k < debtors.length; k++) {
+        var d = debtors[k];
+        var ws = wb.addWorksheet(sanitizeSheetName(d.name, used));
+        var CW = [5, 14, 16, 13, 46];
+        for (var c2 = 0; c2 < NC; c2++) ws.getColumn(c2 + 1).width = CW[c2];
+        ws.getColumn(1).alignment = { horizontal: 'center', vertical: 'middle' };
+        ws.getColumn(2).alignment = { horizontal: 'center', vertical: 'middle' };
+        ws.getColumn(3).alignment = { horizontal: 'right', vertical: 'middle' };
+        ws.getColumn(4).alignment = { horizontal: 'center', vertical: 'middle' };
+        ws.getColumn(5).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+        ws.getColumn(3).numFmt = '#,##0';
+
+        addSheetTitle(ws, NC, '👤 ' + d.name,
+            'Tổng nợ: ' + moneyFull(d.totalDebt) + '   •   Đã trả: ' + moneyFull(d.totalPaid) + '   •   Còn lại: ' + moneyFull(d.remaining));
+        // Tô màu phần "còn lại" trong phụ đề
+        ws.getCell('A2').font = { size: 11, bold: true, color: { argb: d.remaining > 0 ? 'FFB91C1C' : 'FF047857' } };
+
+        var HR = 3;
+        ws.getRow(HR).values = ['#', 'Loại', 'Số tiền (đ)', 'Ngày', 'Ghi chú'];
+        styleHeaderRow(ws.getRow(HR));
+
+        var entries = (d.entries || []).slice().sort(byDateDesc);   // MỚI NHẤT LÊN ĐẦU
+        entries.forEach(function (e, idx) {
+            ws.getRow(HR + 1 + idx).values = [
+                idx + 1,
+                e.kind === 'debt' ? 'Ghi nợ (+)' : 'Trả tiền (−)',
+                e.amount || 0,
+                e.ngay ? fmtDate(e.ngay) : '',
+                e.note || ''
+            ];
+        });
+        applyTableStyle(ws, HR, HR + 1, HR + entries.length, NC);
+        ws.autoFilter = { from: { row: HR, column: 1 }, to: { row: HR, column: NC } };
+        ws.views = [{ state: 'frozen', ySplit: HR }];
+    }
+}
+
+async function exportExcel() {
+    if (!currentWorkspace) { toast('Hãy chọn quỹ trước!', 'error'); return; }
+    var debt = isDebt(currentWorkspace);
+    if (debt && (!debtors || debtors.length === 0)) { toast('Chưa có con nợ để xuất!', 'error'); return; }
+    if (!debt && (!rows || rows.length === 0)) { toast('Chưa có giao dịch để xuất!', 'error'); return; }
+
+    var btn = document.getElementById('btnExport');
+    var orig = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span> Đang xuất...'; }
+    try {
+        await loadExcelJS();
+        var wb = new ExcelJS.Workbook();
+        wb.creator = 'Quỹ Anh Em';
+        wb.created = new Date();
+        if (debt) await buildDebtWorkbook(wb);
+        else await buildTxWorkbook(wb);
+        var buf = await wb.xlsx.writeBuffer();
+        var blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        downloadBlob(blob, exportFileName());
+        toast('Đã xuất Excel!', 'success');
+    } catch (err) {
+        console.error('Export error:', err);
+        toast('Lỗi xuất Excel: ' + (err && err.message ? err.message : err), 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+    }
+}
+
 /* ===== INIT ===== */
 loadWorkspaces();
