@@ -1846,3 +1846,40 @@ input[type="date"].form-control { color-scheme: light dark; }
     .debtor-summary { grid-template-columns: repeat(2, 1fr); }
     .debt-entry-img { max-width: 100%; }
 }
+
+/* =====================================================
+   HIỆU ỨNG MƯỢT (micro-interactions)
+   - Chỉ CSS, không đụng logic.
+   - prefers-reduced-motion đã tắt toàn bộ ở trên -> tự động tôn trọng.
+   ===================================================== */
+
+/* Dòng bảng: hover mượt + vạch nhấn bên trái (gợi ý bấm được) */
+tbody tr { transition: background-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease); }
+tbody tr:hover { box-shadow: inset 3px 0 0 var(--brand-1); }
+
+/* Nút header/phụ: phản hồi khi nhấn (những nút chưa có :active) */
+.btn-qr:active, .btn-add:active, .btn-manage-ws:active, .btn-switch-ws:active,
+.btn-export:active, .btn-login-subtle:active, .btn-logout:active,
+.btn-copy-stk:active { transform: scale(.94); }
+
+/* Thẻ chọn quỹ: xuất hiện lần lượt (cascade) */
+.ws-card { animation: fadeUp .45s var(--ease) both; }
+.ws-card:nth-child(1) { animation-delay: .02s; }
+.ws-card:nth-child(2) { animation-delay: .08s; }
+.ws-card:nth-child(3) { animation-delay: .14s; }
+.ws-card:nth-child(4) { animation-delay: .20s; }
+.ws-card:nth-child(5) { animation-delay: .26s; }
+.ws-card:nth-child(n+6) { animation-delay: .30s; }
+
+/* 3 thẻ tổng quan: cascade nhẹ (đã có fadeUp sẵn, chỉ thêm độ trễ) */
+.stats .stat-card:nth-child(1) { animation-delay: .04s; }
+.stats .stat-card:nth-child(2) { animation-delay: .12s; }
+.stats .stat-card:nth-child(3) { animation-delay: .20s; }
+
+/* Danh mục quản lý quỹ: hover nhấc nhẹ cho mượt */
+.manage-item { transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease); }
+.manage-item:hover { transform: translateY(-1px); }
+
+/* Chuyển NGÀY <-> ĐÊM (auto theme): nền trang + header đổi màu mượt */
+body { transition: background-color .35s var(--ease), color .35s var(--ease); }
+.header { transition: background-color .35s var(--ease); }
