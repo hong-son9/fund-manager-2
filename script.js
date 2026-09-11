@@ -196,6 +196,8 @@ var deepLinkTarget = (function () {
     catch (_) { return null; }
 })();
 var deepLinkConsumed = false;
+// true = vào bằng LINK CHIA SẺ 1 quỹ -> khóa vào đúng quỹ đó (ẩn "Đổi quỹ", không về màn chọn).
+var sharedLock = false;
 
 async function loadWorkspaces() {
     if (!IS_CONFIGURED) return;
@@ -216,7 +218,7 @@ async function loadWorkspaces() {
         if (!target && deepLinkTarget) target = workspaces.find(function (w) {
             return w.slug === deepLinkTarget || String(w.id) === deepLinkTarget;
         });
-        if (target) { selectWorkspace(target); return; }
+        if (target) { sharedLock = true; selectWorkspace(target); return; }
         // Không thấy (token sai / quỹ riêng tư không kèm token) -> routing bình thường bên dưới.
     }
 
@@ -311,12 +313,13 @@ function selectWorkspaceById(id) {
 }
 
 function backToSelector() {
+    if (sharedLock) return;                 // vào bằng link chia sẻ -> khóa 1 quỹ
     if (browseWorkspaces().length > 1) showSelector();
 }
 
 function updateHeaderForState() {
     var inWs     = !!currentWorkspace;
-    var hasMulti = browseWorkspaces().length > 1;
+    var hasMulti = !sharedLock && browseWorkspaces().length > 1;
 
     // Brand
     var logoEl  = document.getElementById('brandLogo');
