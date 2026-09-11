@@ -901,6 +901,10 @@ td.money-dash { color: var(--text-3); font-size: 18px; }
 .btn-icon.vis.on:hover  { background: var(--success); color: #fff; transform: scale(1.1); }
 .btn-icon.vis.off { background: var(--danger-soft); color: var(--danger-strong); }
 .btn-icon.vis.off:hover { background: var(--danger); color: #fff; transform: scale(1.1); }
+.btn-icon.vis.link { background: var(--info-soft); color: var(--info-strong); }
+.btn-icon.vis.link:hover { background: var(--info-strong); color: #fff; transform: scale(1.1); }
+.btn-icon.copylink { background: var(--brand-grad-soft); color: var(--brand-1); }
+.btn-icon.copylink:hover { background: var(--brand-1); color: #fff; transform: scale(1.1); }
 
 /* Filter toggle button (manage list) */
 .btn-icon.flt.on  { background: var(--success-soft); color: var(--success-strong); }
@@ -1265,8 +1269,9 @@ input[type="date"].form-control { color-scheme: light dark; }
     text-transform: uppercase;
     flex-shrink: 0;
 }
-.ws-vis-badge.public  { background: var(--success-soft); color: var(--success-strong); }
-.ws-vis-badge.private { background: var(--danger-soft);  color: var(--danger-strong); }
+.ws-vis-badge.public   { background: var(--success-soft); color: var(--success-strong); }
+.ws-vis-badge.unlisted { background: var(--info-soft);    color: var(--info-strong); }
+.ws-vis-badge.private  { background: var(--danger-soft);  color: var(--danger-strong); }
 .ws-type-badge.cashflow { background: var(--info-soft); color: var(--info-strong); }
 .ws-type-badge.trip     { background: var(--warning-soft); color: var(--warning-strong); }
 .ws-type-badge.debt     { background: var(--danger-soft); color: var(--danger-strong); }

@@ -1,6 +1,11 @@
-// Initialize database from config
+// Initialize database from config.
+// Nếu URL có ?t=<token> (link chia sẻ bảo mật) -> gửi kèm header 'x-share-token'
+// để RLS cho phép đọc đúng quỹ đó (dù quỹ đang Riêng tư).
+var _shareToken = null;
+try { _shareToken = new URLSearchParams(location.search).get('t'); } catch (_) {}
 const db = IS_CONFIGURED
-    ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY,
+        _shareToken ? { global: { headers: { 'x-share-token': _shareToken } } } : undefined)
     : null;
 
 if (!IS_CONFIGURED) {
@@ -164,6 +169,34 @@ function slugify(str) {
 }
 
 /* ===== WORKSPACE: LOAD & ROUTING ===== */
+/* ===== VISIBILITY / SHARE-LINK helpers ===== */
+// Trạng thái hiển thị của 1 quỹ: 'public' | 'unlisted' | 'private'
+//   public   = is_public TRUE  + is_listed TRUE  -> hiện trong danh sách + xem được
+//   unlisted = is_public TRUE  + is_listed FALSE -> ẨN khỏi danh sách, ai có link đều xem được
+//   private  = is_public FALSE                    -> chỉ thủ quỹ
+function wsVisState(ws) {
+    if (!ws || ws.is_public === false) return 'private';
+    if (ws.is_listed === false) return 'unlisted';
+    return 'public';
+}
+// Danh sách quỹ hiện ở màn CHỌN QUỸ: admin thấy hết; khách chỉ thấy quỹ "Công khai".
+function browseWorkspaces() {
+    if (isAdmin) return workspaces.slice();
+    return workspaces.filter(function (w) { return w.is_listed !== false; });
+}
+// Link chia sẻ mở thẳng vào 1 quỹ (kèm token bí mật nếu có).
+function workspaceShareLink(ws) {
+    var url = location.origin + '/?ws=' + encodeURIComponent(ws.slug || ws.id);
+    if (ws.share_token) url += '&t=' + encodeURIComponent(ws.share_token);
+    return url;
+}
+// Đọc ?ws=<slug|id> trên URL lúc vào trang (deep-link) — dùng 1 lần.
+var deepLinkTarget = (function () {
+    try { var v = new URLSearchParams(location.search).get('ws'); return v ? v.trim() : null; }
+    catch (_) { return null; }
+})();
+var deepLinkConsumed = false;
+
 async function loadWorkspaces() {
     if (!IS_CONFIGURED) return;
     var { data, error } = await db
@@ -175,11 +208,24 @@ async function loadWorkspaces() {
     workspaces = data || [];
     workspacesInitialized = true;
 
-    if (workspaces.length === 1) {
-        // Chỉ có 1 quỹ → vào thẳng
-        selectWorkspace(workspaces[0]);
+    // Deep-link: có ?ws=... hoặc ?t=<token> và quỹ đó đọc được -> vào thẳng quỹ đó.
+    if (!deepLinkConsumed && (deepLinkTarget || _shareToken)) {
+        deepLinkConsumed = true;
+        var target = null;
+        if (_shareToken) target = workspaces.find(function (w) { return w.share_token === _shareToken; });
+        if (!target && deepLinkTarget) target = workspaces.find(function (w) {
+            return w.slug === deepLinkTarget || String(w.id) === deepLinkTarget;
+        });
+        if (target) { selectWorkspace(target); return; }
+        // Không thấy (token sai / quỹ riêng tư không kèm token) -> routing bình thường bên dưới.
+    }
+
+    var browse = browseWorkspaces();
+    if (browse.length === 1) {
+        // Chỉ có 1 quỹ (thấy được) → vào thẳng
+        selectWorkspace(browse[0]);
     } else {
-        // 0 hoặc >1 quỹ → luôn hiện selector (theo yêu cầu: mỗi lần vào phải chọn)
+        // 0 hoặc >1 quỹ → hiện màn chọn quỹ
         showSelector();
     }
 }
@@ -265,12 +311,12 @@ function selectWorkspaceById(id) {
 }
 
 function backToSelector() {
-    if (workspaces.length > 1) showSelector();
+    if (browseWorkspaces().length > 1) showSelector();
 }
 
 function updateHeaderForState() {
     var inWs     = !!currentWorkspace;
-    var hasMulti = workspaces.length > 1;
+    var hasMulti = browseWorkspaces().length > 1;
 
     // Brand
     var logoEl  = document.getElementById('brandLogo');
@@ -306,14 +352,15 @@ function updateHeaderForState() {
 function renderWorkspaceCards() {
     var grid = document.getElementById('workspaceGrid');
     if (!grid) return;
-    if (workspaces.length === 0) {
+    var list = browseWorkspaces();
+    if (list.length === 0) {
         grid.innerHTML = '<div class="ws-empty"><div class="icon">📂</div><h3>Chưa có quỹ nào</h3><p>' +
             (isAdmin ? 'Nhấn nút "Quản lý quỹ" trên thanh tiêu đề để tạo quỹ đầu tiên'
                      : 'Vui lòng đợi admin tạo quỹ') +
             '</p></div>';
         return;
     }
-    grid.innerHTML = workspaces.map(function(ws) {
+    grid.innerHTML = list.map(function(ws) {
         return '<div class="ws-card" onclick="selectWorkspaceById(' + ws.id + ')">' +
             '<div class="ws-card-icon">' + (ws.icon || '💰') + '</div>' +
             '<div class="ws-card-name">' + escHtml(ws.name) + '</div>' +
@@ -344,18 +391,24 @@ function renderManageList() {
         return;
     }
     list.innerHTML = workspaces.map(function(ws) {
-        var isPub = ws.is_public !== false; // default treat as public if cột chưa có
         var isTripWs = (ws.type === 'trip');
-        var visBtn = isPub
-            ? '<button class="btn-icon vis on"  onclick="toggleWsVisibility(' + ws.id + ')" title="Đang công khai — bấm để ẩn">👁️</button>'
-            : '<button class="btn-icon vis off" onclick="toggleWsVisibility(' + ws.id + ')" title="Đang ẩn — bấm để công khai">🔒</button>';
+        var vis = wsVisState(ws);   // 'public' | 'unlisted' | 'private'
+        var visBtn, badgeVis;
+        if (vis === 'public') {
+            visBtn = '<button class="btn-icon vis on" onclick="cycleWsVisibility(' + ws.id + ')" title="Công khai (hiện trong danh sách) — bấm để chuyển sang: Chỉ qua link">🌐</button>';
+            badgeVis = '<span class="ws-vis-badge public">Công khai</span>';
+        } else if (vis === 'unlisted') {
+            visBtn = '<button class="btn-icon vis link" onclick="cycleWsVisibility(' + ws.id + ')" title="Chỉ qua link (ẩn khỏi danh sách, ai có link đều xem) — bấm để chuyển sang: Riêng tư">🔗</button>';
+            badgeVis = '<span class="ws-vis-badge unlisted">Chỉ qua link</span>';
+        } else {
+            visBtn = '<button class="btn-icon vis off" onclick="cycleWsVisibility(' + ws.id + ')" title="Riêng tư (chỉ thủ quỹ) — bấm để chuyển sang: Công khai">🔒</button>';
+            badgeVis = '<span class="ws-vis-badge private">Riêng tư</span>';
+        }
+        var linkBtn = '<button class="btn-icon copylink" onclick="copyWsLink(' + ws.id + ')" title="Sao chép link chia sẻ quỹ này">📋</button>';
         var fltOn = (ws.show_filter !== false); // mặc định bật nếu cột chưa có
         var fltBtn = fltOn
             ? '<button class="btn-icon flt on"  onclick="toggleWsFilter(' + ws.id + ')" title="Đang hiện thanh tìm kiếm — bấm để ẩn">🔍</button>'
             : '<button class="btn-icon flt off" onclick="toggleWsFilter(' + ws.id + ')" title="Đang ẩn thanh tìm kiếm — bấm để hiện">🚫</button>';
-        var badgeVis = isPub
-            ? '<span class="ws-vis-badge public">Công khai</span>'
-            : '<span class="ws-vis-badge private">Đã ẩn</span>';
         var isDebtWs = (ws.type === 'debt');
         var badgeType = isTripWs
             ? '<span class="ws-type-badge trip">✈️ Đóng quỹ</span>'
@@ -380,22 +433,43 @@ function renderManageList() {
                 targetLine +
             '</div>' +
             '<div class="manage-item-actions">' +
-                targetBtn + fltBtn + visBtn +
+                targetBtn + linkBtn + fltBtn + visBtn +
                 '<button class="btn-icon del" onclick="confirmDeleteWorkspace(' + ws.id + ')" title="Xóa quỹ">🗑️</button>' +
             '</div>' +
         '</div>';
     }).join('');
 }
 
-async function toggleWsVisibility(id) {
+// Xoay vòng 3 trạng thái: Công khai → Chỉ qua link → Riêng tư → Công khai
+async function cycleWsVisibility(id) {
     var ws = workspaces.find(function(x){ return x.id === id; });
     if (!ws) return;
-    var newVal = !(ws.is_public !== false);
-    var { error } = await db.from('workspaces').update({ is_public: newVal }).eq('id', id);
+    var cur = wsVisState(ws), patch, msg;
+    if (cur === 'public')        { patch = { is_public: true,  is_listed: false }; msg = 'Quỹ "' + ws.name + '" → Chỉ qua link (ẩn khỏi danh sách)'; }
+    else if (cur === 'unlisted') { patch = { is_public: false, is_listed: false }; msg = 'Quỹ "' + ws.name + '" → Riêng tư (chỉ thủ quỹ)'; }
+    else                         { patch = { is_public: true,  is_listed: true  }; msg = 'Quỹ "' + ws.name + '" → Công khai (hiện trong danh sách)'; }
+    var { error } = await db.from('workspaces').update(patch).eq('id', id);
     if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
-    toast(newVal ? 'Đã công khai quỹ "' + ws.name + '"' : 'Đã ẩn quỹ "' + ws.name + '" với người xem', 'success');
+    toast(msg, 'success');
     await loadWorkspacesPreserveCurrent();
     renderManageList();
+}
+
+// Sao chép link chia sẻ quỹ (mở thẳng vào quỹ đó).
+function copyWsLink(id) {
+    var ws = workspaces.find(function(x){ return x.id === id; });
+    if (!ws) return;
+    var link = workspaceShareLink(ws);
+    var priv = wsVisState(ws) === 'private';
+    var msg = (priv && !ws.share_token)
+        ? '⚠️ Quỹ Riêng tư nhưng chưa có mã link — hãy chạy migration_sharetoken.sql. Người ngoài tạm thời chưa mở được.'
+        : '✅ Đã sao chép link chia sẻ!';
+    function done() { toast(msg, priv ? 'error' : 'success'); }
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(link).then(done, function () { prompt('Sao chép link:', link); });
+        } else { prompt('Sao chép link:', link); }
+    } catch (_) { prompt('Sao chép link:', link); }
 }
 
 async function toggleWsFilter(id) {
@@ -426,6 +500,7 @@ async function addWorkspace() {
         icon: icon,
         sort_order: workspaces.length,
         is_public: isPublic,
+        is_listed: isPublic,   // tạo Công khai -> hiện trong danh sách; tạo Riêng tư -> ẩn
         type: type,
         show_filter: document.getElementById('wsShowFilter').checked
     };
