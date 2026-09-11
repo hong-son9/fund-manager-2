@@ -656,18 +656,34 @@
 
 <script src="script.js"></script>
 <script>
-    // Đăng ký service worker (PWA). Khi có bản deploy mới, SW mới sẽ chiếm quyền
-    // và ta TỰ TẢI LẠI trang 1 lần để lấy CSS/JS mới (tránh kẹt cache như trước).
+    // Service worker (PWA) + TỰ CẬP NHẬT khi có bản deploy mới.
+    // - updateViaCache:'none' -> trình duyệt luôn tải lại sw.js (không dùng HTTP cache).
+    // - reg.update() mỗi lần mở/quay lại app -> phát hiện bản mới (quan trọng cho iOS).
+    // - SW mới kích hoạt ngay (skipWaiting) -> controllerchange -> tự tải lại trang 1 lần.
     if ('serviceWorker' in navigator) {
+        var __hadController = !!navigator.serviceWorker.controller;
+        var __reloaded = false;
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+            if (__hadController && !__reloaded) { __reloaded = true; window.location.reload(); }
+        });
         window.addEventListener('load', function () {
-            var hadController = !!navigator.serviceWorker.controller;
-            navigator.serviceWorker.register('/sw.js').catch(function () {});
-            navigator.serviceWorker.addEventListener('controllerchange', function () {
-                if (hadController && !window.__swReloaded) {
-                    window.__swReloaded = true;
-                    window.location.reload();
-                }
-            });
+            navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(function (reg) {
+                var check = function () { try { reg.update(); } catch (_) {} };
+                check();
+                document.addEventListener('visibilitychange', function () {
+                    if (document.visibilityState === 'visible') check();
+                });
+                window.addEventListener('focus', check);
+                // Có SW mới cài xong nhưng bị "chờ" -> ép kích hoạt.
+                reg.addEventListener('updatefound', function () {
+                    var nw = reg.installing;
+                    if (nw) nw.addEventListener('statechange', function () {
+                        if (nw.state === 'installed' && reg.waiting) {
+                            try { reg.waiting.postMessage({ type: 'SKIP_WAITING' }); } catch (_) {}
+                        }
+                    });
+                });
+            }).catch(function () {});
         });
     }
 </script>

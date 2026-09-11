@@ -6,8 +6,13 @@
    ============================================================ */
 
 // Doi so phien ban moi khi sua file tinh (buoc SW cap nhat cache).
-const VERSION = 'v2';
+const VERSION = 'v3';
 const CACHE = 'quy-ae-' + VERSION;
+
+// Cho phep trang ep SW moi kich hoat ngay (khong cho o trang thai "waiting").
+self.addEventListener('message', function (e) {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
+});
 
 // "Vo" app can cache de mo duoc khi offline.
 const SHELL = [
