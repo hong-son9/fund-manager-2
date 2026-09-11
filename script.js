@@ -463,11 +463,12 @@ function copyWsLink(id) {
     var ws = workspaces.find(function(x){ return x.id === id; });
     if (!ws) return;
     var link = workspaceShareLink(ws);
-    var priv = wsVisState(ws) === 'private';
-    var msg = (priv && !ws.share_token)
-        ? '⚠️ Quỹ Riêng tư nhưng chưa có mã link — hãy chạy migration_sharetoken.sql. Người ngoài tạm thời chưa mở được.'
-        : '✅ Đã sao chép link chia sẻ!';
-    function done() { toast(msg, priv ? 'error' : 'success'); }
+    // Chỉ cảnh báo (X) khi quỹ Riêng tư MÀ chưa có token -> người ngoài chưa mở được.
+    var warnNoToken = (wsVisState(ws) === 'private') && !ws.share_token;
+    var msg = warnNoToken
+        ? '⚠️ Quỹ Riêng tư nhưng chưa có mã link — hãy chạy migration_sharetoken.sql.'
+        : 'Đã sao chép link chia sẻ!';
+    function done() { toast(msg, warnNoToken ? 'error' : 'success'); }
     try {
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(link).then(done, function () { prompt('Sao chép link:', link); });
